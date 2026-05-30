@@ -1,0 +1,1834 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Arbeitszeit-App</title>
+<style>
+:root {
+  --bg:       #0f1117;
+  --surface:  #1a1d27;
+  --border:   #2d3148;
+  --text:     #e2e8f0;
+  --muted:    #8892a4;
+  --blue:     #3B82F6;
+  --blue-bg:  #162040;
+  --green:    #22C55E;
+  --green-bg: #0f2318;
+  --amber:    #F59E0B;
+  --amber-bg: #261a06;
+  --red:      #EF4444;
+  --red-bg:   #250e0e;
+  --purple:   #8B5CF6;
+  --purple-bg:#1a1230;
+  --r:        12px;
+  --r-sm:     8px;
+  --shadow:   0 1px 3px rgba(0,0,0,.4),0 1px 2px rgba(0,0,0,.3);
+  --shadow-md:0 4px 12px rgba(0,0,0,.5);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+button{cursor:pointer;font-family:inherit}
+input,select,textarea{font-family:inherit}
+
+/* ── Loading / Denied ──────────────────────────────────── */
+#loading-screen,#access-denied{
+  position:fixed;inset:0;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:16px;
+  background:var(--bg);z-index:9999}
+.spinner{width:40px;height:40px;border:3px solid var(--border);
+  border-top-color:var(--blue);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+#access-denied{display:none}
+.denied-box{text-align:center;background:var(--surface);padding:40px;border-radius:var(--r);
+  box-shadow:var(--shadow-md);max-width:360px}
+.denied-box h2{font-size:1.4rem;margin-bottom:8px;color:var(--red)}
+.denied-box p{color:var(--muted);font-size:.9rem}
+
+/* ── Header ────────────────────────────────────────────── */
+.app-header{
+  background:linear-gradient(135deg,#0F172A,#1E3A5F);
+  color:white;padding:14px 24px;
+  display:flex;align-items:center;justify-content:space-between;
+  box-shadow:0 2px 8px rgba(0,0,0,.25);position:sticky;top:0;z-index:100}
+.header-logo{font-size:1.2rem;font-weight:700;letter-spacing:-.02em;display:flex;align-items:center;gap:10px}
+.header-logo span{font-size:1.4rem}
+.header-right{display:flex;align-items:center;gap:12px}
+.role-chip{background:rgba(255,255,255,.15);padding:4px 12px;border-radius:20px;
+  font-size:.75rem;font-weight:600;letter-spacing:.05em;text-transform:uppercase}
+.role-chip.chef{background:rgba(139,92,246,.35)}
+
+/* ── Dashboard ─────────────────────────────────────────── */
+.dashboard{background:var(--surface);border-bottom:1px solid var(--border);padding:16px 24px}
+.dashboard-grid{display:flex;gap:12px;flex-wrap:wrap}
+.dash-card{
+  flex:1;min-width:130px;padding:14px 18px;border-radius:var(--r-sm);
+  border:1px solid var(--border);transition:box-shadow .2s}
+.dash-card:hover{box-shadow:var(--shadow)}
+.dash-card-label{font-size:.72rem;font-weight:600;text-transform:uppercase;
+  letter-spacing:.07em;color:var(--muted);margin-bottom:6px}
+.dash-card-value{font-size:1.8rem;font-weight:700;line-height:1}
+.dash-card-unit{font-size:.8rem;font-weight:400;color:var(--muted);margin-left:3px}
+.dash-card.blue  {background:var(--blue-bg);  border-color:#1e3a6e}
+.dash-card.green {background:var(--green-bg); border-color:#1a3a22}
+.dash-card.amber {background:var(--amber-bg); border-color:#3a2a0a}
+.dash-card.red   {background:var(--red-bg);   border-color:#3a1818}
+.dash-card.purple{background:var(--purple-bg);border-color:#2a1a4a}
+.dash-card.blue .dash-card-value  {color:var(--blue)}
+.dash-card.green .dash-card-value {color:#16A34A}
+.dash-card.amber .dash-card-value {color:#D97706}
+.dash-card.red   .dash-card-value {color:var(--red)}
+.dash-card.purple .dash-card-value{color:var(--purple)}
+
+/* ── Tabs ──────────────────────────────────────────────── */
+.tab-nav{background:var(--surface);border-bottom:1px solid var(--border);
+  padding:0 24px;display:flex}
+.tab-btn{
+  padding:13px 20px;background:none;border:none;border-bottom:2px solid transparent;
+  font-size:.875rem;font-weight:500;color:var(--muted);transition:all .2s}
+.tab-btn:hover{color:var(--text)}
+.tab-btn.active{color:var(--blue);border-bottom-color:var(--blue)}
+
+/* ── Main ──────────────────────────────────────────────── */
+.main{padding:24px;max-width:1400px;margin:0 auto}
+.tab-content{display:none}
+.tab-content.active{display:block;animation:fadeIn .2s ease}
+@keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+
+/* ── Cards ─────────────────────────────────────────────── */
+.card{background:var(--surface);border-radius:var(--r);
+  border:1px solid var(--border);box-shadow:var(--shadow);padding:20px;margin-bottom:16px}
+.card-title{font-size:.9rem;font-weight:600;color:var(--muted);
+  text-transform:uppercase;letter-spacing:.06em;margin-bottom:16px}
+.card-row{display:flex;gap:16px;margin-bottom:16px;flex-wrap:wrap}
+
+/* ── Manuelles Formular Grid ───────────────────────────── */
+.manual-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:12px;
+  align-items:end}
+.manual-grid .span-full{grid-column:1/-1}
+.manual-grid .btn-cell .btn-primary{width:100%;padding:10px 16px}
+
+/* ── Stempeluhr ────────────────────────────────────────── */
+.stempeluhr-display{
+  display:flex;align-items:center;gap:20px;flex-wrap:wrap}
+.timer-time{
+  font-size:2.8rem;font-weight:700;letter-spacing:.05em;
+  font-variant-numeric:tabular-nums;color:var(--text)}
+.timer-time.running{color:var(--blue)}
+.timer-info{color:var(--muted);font-size:.85rem;margin-top:4px}
+.pulse{display:inline-block;width:10px;height:10px;border-radius:50%;
+  background:var(--green);margin-right:6px;
+  box-shadow:0 0 0 0 rgba(34,197,94,.4);animation:pulse 1.5s infinite}
+@keyframes pulse{
+  0%{box-shadow:0 0 0 0 rgba(34,197,94,.4)}
+  70%{box-shadow:0 0 0 8px rgba(34,197,94,0)}
+  100%{box-shadow:0 0 0 0 rgba(34,197,94,0)}}
+.btn-stempel-start{
+  padding:12px 28px;background:var(--green);color:white;border:none;
+  border-radius:var(--r-sm);font-size:.95rem;font-weight:600;
+  transition:all .2s;box-shadow:0 2px 8px rgba(34,197,94,.3)}
+.btn-stempel-start:hover{background:#16A34A;transform:translateY(-1px)}
+.btn-stempel-stop{
+  padding:12px 28px;background:var(--red);color:white;border:none;
+  border-radius:var(--r-sm);font-size:.95rem;font-weight:600;
+  transition:all .2s;box-shadow:0 2px 8px rgba(239,68,68,.3)}
+.btn-stempel-stop:hover{background:#DC2626;transform:translateY(-1px)}
+.stempel-idle{color:var(--muted);font-size:.95rem}
+
+/* ── Form ──────────────────────────────────────────────── */
+.form-row{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end}
+.form-group{display:flex;flex-direction:column;gap:6px;flex:1;min-width:120px}
+.form-group label{font-size:.78rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.form-group input,.form-group select,.form-group textarea{
+  padding:9px 12px;border:1px solid var(--border);border-radius:var(--r-sm);
+  font-size:.9rem;color:var(--text);background:var(--surface);transition:border-color .2s;
+  outline:none}
+.form-group input:focus,.form-group select:focus,.form-group textarea:focus{
+  border-color:var(--blue);box-shadow:0 0 0 3px rgba(59,130,246,.1)}
+.form-group textarea{resize:vertical;min-height:80px}
+.btn-primary{
+  padding:9px 20px;background:var(--blue);color:white;border:none;
+  border-radius:var(--r-sm);font-size:.875rem;font-weight:600;
+  transition:all .2s;white-space:nowrap}
+.btn-primary:hover{background:#2563EB;transform:translateY(-1px)}
+.btn-secondary{
+  padding:9px 16px;background:var(--surface);color:var(--text);
+  border:1px solid var(--border);border-radius:var(--r-sm);
+  font-size:.875rem;font-weight:500;transition:all .2s}
+.btn-secondary:hover{background:var(--bg);border-color:#94A3B8}
+.btn-danger{
+  padding:9px 16px;background:var(--red-bg);color:var(--red);
+  border:1px solid rgba(239,68,68,.3);border-radius:var(--r-sm);
+  font-size:.875rem;font-weight:600;transition:all .2s}
+.btn-danger:hover{background:rgba(239,68,68,.15)}
+.btn-icon{
+  padding:6px 10px;background:none;border:1px solid var(--border);
+  border-radius:6px;font-size:.8rem;color:var(--muted);transition:all .2s}
+.btn-icon:hover{background:var(--bg);border-color:#94A3B8;color:var(--text)}
+.btn-icon.del:hover{background:var(--red-bg);border-color:#FECACA;color:var(--red)}
+
+/* ── View Toggle ───────────────────────────────────────── */
+.view-toggle{display:flex;background:var(--bg);border-radius:var(--r-sm);
+  padding:3px;border:1px solid var(--border);width:fit-content;margin-bottom:16px}
+.view-btn{
+  padding:7px 18px;border:none;border-radius:6px;font-size:.85rem;
+  font-weight:500;color:var(--muted);background:none;transition:all .2s}
+.view-btn.active{background:var(--surface);color:var(--blue);box-shadow:var(--shadow);font-weight:600}
+
+/* ── Chart ─────────────────────────────────────────────── */
+.chart-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.chart-nav-label{font-size:.9rem;font-weight:600;color:var(--text)}
+.chart-nav-total{font-size:.85rem;color:var(--muted);display:block;margin-top:2px}
+.chart-nav-btns{display:flex;gap:6px}
+.chart-nav-btn{
+  padding:5px 10px;background:var(--surface);border:1px solid var(--border);
+  border-radius:6px;font-size:.8rem;color:var(--text);transition:all .2s}
+.chart-nav-btn:hover{background:var(--bg);border-color:#94A3B8}
+.chart-nav-btn:disabled{opacity:.4;cursor:not-allowed}
+.chart-area{
+  height:220px;display:flex;align-items:flex-end;gap:4px;
+  padding:0 4px 0 4px;border-bottom:2px solid var(--border);margin-bottom:4px}
+.chart-col{
+  flex:1;display:flex;flex-direction:column;align-items:center;height:100%}
+.bar-val{
+  font-size:.65rem;color:var(--muted);margin-bottom:3px;min-height:16px;
+  text-align:center;white-space:nowrap}
+.bar-track{flex:1;width:100%;display:flex;align-items:flex-end;justify-content:center}
+.bar{
+  width:62%;min-height:3px;border-radius:4px 4px 0 0;
+  transition:height .35s cubic-bezier(.4,0,.2,1);background:var(--blue)}
+.bar.today{background:#2563EB;box-shadow:0 -2px 8px rgba(59,130,246,.4)}
+.bar.current{background:#3B82F6}
+.bar-lbl{font-size:.7rem;color:var(--muted);margin-top:6px;text-align:center}
+.chart-col.today .bar-lbl{color:var(--blue);font-weight:700}
+
+/* ── Time Entries Table ─────────────────────────────────── */
+.entries-table{width:100%;border-collapse:collapse;font-size:.85rem}
+.entries-table th{
+  text-align:left;padding:8px 12px;font-size:.72rem;font-weight:600;
+  text-transform:uppercase;letter-spacing:.06em;color:var(--muted);
+  border-bottom:2px solid var(--border);background:var(--bg)}
+.entries-table td{padding:8px 12px;border-bottom:1px solid var(--border);vertical-align:middle}
+.entries-table tr:last-child td{border-bottom:none}
+.entries-table tr:hover td{background:rgba(255,255,255,.04)}
+.entries-table .actions{display:flex;gap:6px}
+.duration-badge{
+  background:var(--blue-bg);color:var(--blue);
+  padding:2px 8px;border-radius:20px;font-weight:600;font-size:.78rem}
+.empty-state{text-align:center;padding:40px;color:var(--muted);font-size:.9rem}
+
+/* ── Kanban Board ───────────────────────────────────────── */
+.kanban-toolbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+.kanban-toolbar h2{font-size:1rem;font-weight:600}
+.kanban-board{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+@media(max-width:900px){.kanban-board{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:560px){.kanban-board{grid-template-columns:1fr}}
+.kanban-col{
+  background:var(--surface);border-radius:var(--r);
+  border:1px solid var(--border);box-shadow:var(--shadow);
+  display:flex;flex-direction:column;min-height:300px;transition:all .2s}
+.kanban-col.drag-over{
+  border-color:var(--blue);box-shadow:0 0 0 2px rgba(59,130,246,.2);
+  background:rgba(59,130,246,.08)}
+.kanban-col-header{
+  padding:14px 16px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;
+  border-top:3px solid transparent;border-radius:var(--r) var(--r) 0 0}
+.kanban-col-header h3{font-size:.85rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em}
+.col-count{
+  background:var(--bg);padding:2px 8px;border-radius:10px;
+  font-size:.75rem;font-weight:700;color:var(--muted)}
+.col-offen    .kanban-col-header{border-top-color:var(--blue)}
+.col-inarbeit .kanban-col-header{border-top-color:var(--amber)}
+.col-blockiert .kanban-col-header{border-top-color:var(--red)}
+.col-erledigt .kanban-col-header{border-top-color:var(--green)}
+.col-offen     h3{color:var(--blue)}
+.col-inarbeit  h3{color:#D97706}
+.col-blockiert h3{color:var(--red)}
+.col-erledigt  h3{color:#16A34A}
+.kanban-cards{padding:10px;flex:1;display:flex;flex-direction:column;gap:8px}
+.drop-hint{
+  flex:1;display:flex;align-items:center;justify-content:center;
+  color:var(--muted);font-size:.8rem;text-align:center;padding:20px;
+  border:2px dashed var(--border);border-radius:var(--r-sm);min-height:80px}
+.task-card{
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--r-sm);
+  padding:12px 14px;cursor:pointer;transition:all .2s;
+  border-left:3px solid var(--border);position:relative;
+  -webkit-user-select:none;user-select:none}
+.task-card:hover{box-shadow:var(--shadow-md);transform:translateY(-1px)}
+.task-card.dragging{opacity:.5;transform:scale(.97)}
+.task-card.prio-hoch  {border-left-color:var(--red)}
+.task-card.prio-mittel{border-left-color:var(--amber)}
+.task-card.prio-niedrig{border-left-color:var(--green)}
+.task-card-top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:6px}
+.task-titel{font-size:.88rem;font-weight:600;line-height:1.3;flex:1}
+.task-badges{display:flex;gap:4px;flex-wrap:wrap;align-items:flex-start}
+.prio-badge{
+  padding:2px 7px;border-radius:10px;font-size:.68rem;font-weight:700;
+  text-transform:uppercase;letter-spacing:.05em;white-space:nowrap}
+.prio-badge.hoch   {background:var(--red-bg);  color:var(--red)}
+.prio-badge.mittel {background:var(--amber-bg); color:#D97706}
+.prio-badge.niedrig{background:var(--green-bg); color:#16A34A}
+.chef-badge{
+  background:var(--purple-bg);color:var(--purple);
+  padding:2px 7px;border-radius:10px;font-size:.68rem;font-weight:700}
+.task-notiz{font-size:.78rem;color:var(--muted);overflow:hidden;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
+  line-height:1.4;margin-top:4px}
+.task-footer{
+  display:flex;align-items:center;justify-content:space-between;
+  margin-top:8px;padding-top:8px;border-top:1px solid var(--border)}
+.task-date{font-size:.7rem;color:var(--muted)}
+
+/* ── Archiv ─────────────────────────────────────────────── */
+.archiv-item{
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--r-sm);
+  padding:14px 18px;margin-bottom:8px;display:flex;align-items:flex-start;
+  gap:14px;transition:box-shadow .2s;cursor:pointer}
+.archiv-item:hover{box-shadow:var(--shadow);border-color:#3d4160}
+.archiv-icon{font-size:1.2rem;margin-top:1px}
+.archiv-body{flex:1}
+.archiv-titel{font-size:.9rem;font-weight:600;margin-bottom:4px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.archiv-notiz{font-size:.8rem;color:var(--muted);line-height:1.4;margin-bottom:6px}
+.archiv-meta{display:flex;gap:10px;font-size:.75rem;color:var(--muted);flex-wrap:wrap}
+
+/* ── Modal ──────────────────────────────────────────────── */
+.modal-overlay{
+  display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);
+  z-index:1000;align-items:center;justify-content:center;padding:16px}
+.modal-overlay.open{display:flex;animation:fadeInBg .2s ease}
+@keyframes fadeInBg{from{background:transparent}to{background:rgba(0,0,0,.45)}}
+.modal-box{
+  background:var(--surface);border-radius:var(--r);box-shadow:var(--shadow-md);
+  width:100%;max-width:500px;max-height:90vh;overflow-y:auto;
+  animation:slideUp .25s cubic-bezier(.4,0,.2,1)}
+@keyframes slideUp{from{transform:translateY(20px);opacity:0}to{transform:none;opacity:1}}
+.modal-header{
+  padding:20px 24px 16px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between}
+.modal-header h3{font-size:1.05rem;font-weight:700}
+.modal-close{
+  background:none;border:none;font-size:1.2rem;color:var(--muted);
+  cursor:pointer;padding:4px 8px;border-radius:6px;transition:all .15s}
+.modal-close:hover{background:var(--bg);color:var(--text)}
+.modal-body{padding:20px 24px}
+.modal-footer{
+  padding:16px 24px;border-top:1px solid var(--border);
+  display:flex;justify-content:flex-end;gap:10px}
+.modal-info-row{
+  display:flex;align-items:flex-start;gap:10px;
+  padding:8px 0;border-bottom:1px solid var(--border);font-size:.875rem}
+.modal-info-row:last-child{border-bottom:none}
+.modal-info-label{width:110px;font-weight:600;color:var(--muted);flex-shrink:0;font-size:.8rem;padding-top:2px}
+
+/* ── Toasts ─────────────────────────────────────────────── */
+#toast-container{
+  position:fixed;bottom:24px;right:24px;z-index:9999;
+  display:flex;flex-direction:column;gap:8px;pointer-events:none}
+.toast{
+  padding:12px 18px;border-radius:var(--r-sm);font-size:.875rem;font-weight:500;
+  box-shadow:var(--shadow-md);max-width:320px;pointer-events:auto;
+  animation:toastIn .3s ease;white-space:pre-line}
+.toast.success{background:#1E293B;color:white}
+.toast.error{background:var(--red);color:white}
+@keyframes toastIn{from{transform:translateX(100%);opacity:0}to{transform:none;opacity:1}}
+.toast.removing{animation:toastOut .25s ease forwards}
+@keyframes toastOut{to{transform:translateX(110%);opacity:0}}
+
+/* ── Mobile ─────────────────────────────────────────────── */
+@media(max-width:768px){
+
+  /* Header */
+  .app-header{padding:11px 16px}
+  .header-logo{font-size:1rem;gap:8px}
+  .role-chip{font-size:.68rem;padding:3px 9px}
+
+  /* Dashboard */
+  .dashboard{padding:10px 12px}
+  .dashboard-grid{gap:8px}
+  .dash-card{flex:1 1 calc(50% - 4px);min-width:0;padding:11px 12px}
+  .dash-card-value{font-size:1.45rem}
+  .dash-card-label{font-size:.68rem}
+
+  /* Tabs – gleichmäßig über volle Breite */
+  .tab-nav{padding:0}
+  .tab-btn{flex:1;padding:12px 6px;font-size:.82rem;text-align:center}
+
+  /* Main */
+  .main{padding:10px 12px}
+  .card{padding:14px 12px;margin-bottom:10px}
+
+  /* Stempeluhr */
+  .stempeluhr-display{flex-direction:column;align-items:stretch;gap:14px}
+  .timer-time{font-size:2.4rem}
+  .btn-stempel-start,.btn-stempel-stop{
+    width:100%;padding:15px;font-size:1rem;justify-content:center;text-align:center}
+
+  /* Formulare – vertikal stapeln */
+  .form-row{flex-direction:column;gap:10px}
+  .form-group{min-width:0;max-width:100% !important}
+  .form-group input,.form-group select,.form-group textarea{
+    padding:11px 12px;font-size:.95rem}
+  .form-group:last-child{width:100%}
+  .btn-primary,.btn-secondary{padding:11px 16px;width:100%;text-align:center}
+  .form-row .btn-primary{width:auto}
+
+  /* Einträge-Tabelle scrollbar */
+  .entries-table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:0 -12px;padding:0 12px}
+  .entries-table{min-width:460px}
+  .entries-table th,.entries-table td{padding:7px 10px}
+
+  /* Chart */
+  .chart-area{height:150px;gap:3px}
+  .bar-val{font-size:.58rem}
+  .bar-lbl{font-size:.6rem;margin-top:4px}
+  .chart-nav-label{font-size:.82rem}
+  .chart-nav-btn{padding:6px 10px;font-size:.75rem}
+  .view-toggle{width:100%}
+  .view-btn{flex:1;text-align:center;padding:8px 12px}
+
+  /* Kanban */
+  .kanban-toolbar{flex-direction:column;align-items:stretch;gap:10px}
+  .kanban-toolbar .btn-primary{width:100%;text-align:center;padding:12px}
+
+  /* Modal → Bottom Sheet */
+  .modal-overlay{padding:0;align-items:flex-end}
+  .modal-box{
+    border-radius:var(--r) var(--r) 0 0;
+    max-width:100%;max-height:88vh;
+    animation:slideUpMobile .25s cubic-bezier(.4,0,.2,1)}
+  @keyframes slideUpMobile{from{transform:translateY(100%)}to{transform:none}}
+  .modal-header{padding:16px 18px 14px}
+  .modal-body{padding:14px 18px}
+  .modal-footer{padding:12px 18px;gap:8px}
+  .modal-footer button{flex:1;text-align:center;padding:12px}
+
+  /* Toast – volle Breite unten */
+  #toast-container{bottom:0;right:0;left:0;padding:0 12px 12px;align-items:stretch}
+  .toast{max-width:100%;text-align:center}
+  @keyframes toastIn{from{transform:translateY(80px);opacity:0}to{transform:none;opacity:1}}
+
+  /* Archiv */
+  .archiv-item{padding:12px}
+  .archiv-meta{gap:8px}
+
+  /* Karten-Reihe */
+  .card-row{flex-direction:column;gap:10px}
+}
+
+@media(max-width:400px){
+  .dash-card{flex:1 1 100%}
+  .timer-time{font-size:2rem}
+}
+
+/* ── Demo Banner ─────────────────────────────────────── */
+#demo-banner{
+  background:var(--amber-bg);border-bottom:1px solid #3a2a0a;
+  padding:10px 24px;font-size:.85rem;color:#D97706;display:none;
+  line-height:1.5}
+</style>
+</head>
+<body>
+
+<!-- Loading -->
+<div id="loading-screen">
+  <div class="spinner"></div>
+  <p style="color:var(--muted);font-size:.9rem">Wird geladen…</p>
+</div>
+
+<!-- Access Denied -->
+<div id="access-denied">
+  <div class="denied-box">
+    <div style="font-size:2.5rem;margin-bottom:12px">🔒</div>
+    <h2>Kein Zugang</h2>
+    <p>Diese URL ist ungültig oder abgelaufen.<br>Bitte die korrekte URL verwenden.</p>
+  </div>
+</div>
+
+<!-- App -->
+<div id="app" style="display:none">
+
+  <!-- Header -->
+  <header class="app-header">
+    <div class="header-logo">
+      <span>⏱</span>
+      <span>Abdi-IT</span>
+    </div>
+    <div class="header-right">
+      <div id="role-chip" class="role-chip">–</div>
+    </div>
+  </header>
+
+  <!-- Demo Banner (nur im Demo-Modus sichtbar) -->
+  <div id="demo-banner">
+    🔍 Demo-Ansicht – Daten werden nur in deinem Browser gespeichert und beim Schließen des Tabs zurückgesetzt.
+  </div>
+
+  <!-- Dashboard -->
+  <div class="dashboard">
+    <div id="dashboard-cards" class="dashboard-grid"></div>
+  </div>
+
+  <!-- Tabs -->
+  <nav class="tab-nav">
+    <button class="tab-btn active" onclick="switchTab('zeiten')">Zeiten</button>
+    <button class="tab-btn" onclick="switchTab('aufgaben')">Aufgaben</button>
+    <button class="tab-btn" onclick="switchTab('archiv')">Archiv</button>
+  </nav>
+
+  <!-- Content -->
+  <div class="main">
+
+    <!-- ═══ Zeiten Tab ═══ -->
+    <div id="tab-zeiten" class="tab-content active">
+
+      <!-- Chart Ansicht -->
+      <div class="card">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+          <div class="view-toggle">
+            <button class="view-btn active" id="vbtn-woche" onclick="setView('woche')">Woche</button>
+            <button class="view-btn" id="vbtn-monat" onclick="setView('monat')">Jahr</button>
+          </div>
+        </div>
+
+        <!-- Wochenansicht -->
+        <div id="chart-woche">
+          <div class="chart-nav">
+            <div>
+              <span class="chart-nav-label" id="woche-label">Aktuelle Woche</span>
+              <span class="chart-nav-total" id="woche-total"></span>
+            </div>
+            <div class="chart-nav-btns">
+              <button class="chart-nav-btn" onclick="navWoche(-1)">← Zurück</button>
+              <button class="chart-nav-btn" id="woche-forward-btn" onclick="navWoche(1)">Vor →</button>
+            </div>
+          </div>
+          <div id="chart-bars-woche" class="chart-area"></div>
+        </div>
+
+        <!-- Jahresansicht -->
+        <div id="chart-monat" style="display:none">
+          <div class="chart-nav">
+            <div>
+              <span class="chart-nav-label" id="monat-label">Jahr</span>
+            </div>
+            <div class="chart-nav-btns">
+              <button class="chart-nav-btn" onclick="navJahr(-1)">← Zurück</button>
+              <button class="chart-nav-btn" id="jahr-forward-btn" onclick="navJahr(1)">Vor →</button>
+            </div>
+          </div>
+          <div id="chart-bars-monat" class="chart-area"></div>
+        </div>
+      </div>
+
+      <!-- Einträge der Woche -->
+      <div class="card" id="entries-card">
+        <div class="card-title" id="entries-title">Einträge dieser Woche</div>
+        <div id="entries-container"></div>
+      </div>
+
+      <!-- Manueller Eintrag (nur Mitarbeiter) -->
+      <div id="manual-entry-card" class="card" style="display:none">
+        <div class="card-title">Zeit manuell eintragen</div>
+        <form id="manual-form" onsubmit="submitManualEntry(event)">
+          <div class="manual-grid">
+            <div class="form-group span-full">
+              <label>Datum</label>
+              <input type="date" id="me-datum" required>
+            </div>
+            <div class="form-group">
+              <label>Von</label>
+              <input type="time" id="me-start" required>
+            </div>
+            <div class="form-group">
+              <label>Bis</label>
+              <input type="time" id="me-end" required>
+            </div>
+            <div class="form-group">
+              <label>Pause (Min)</label>
+              <input type="number" id="me-pause" min="0" value="0">
+            </div>
+            <div class="form-group btn-cell">
+              <button type="submit" class="btn-primary">Eintragen</button>
+            </div>
+          </div>
+        </form>
+      </div>
+
+      <!-- Stempeluhr -->
+      <div class="card">
+        <div class="card-title">Stempeluhr</div>
+        <div class="stempeluhr-display">
+          <div>
+            <div id="timer-time" class="timer-time">00:00:00</div>
+            <div id="timer-info" class="timer-info">Keine aktive Zeiterfassung</div>
+          </div>
+          <div id="stempel-btn-wrap"></div>
+        </div>
+      </div>
+
+    </div><!-- /tab-zeiten -->
+
+    <!-- ═══ Aufgaben Tab ═══ -->
+    <div id="tab-aufgaben" class="tab-content">
+      <div class="kanban-toolbar">
+        <h2>Aufgaben-Board</h2>
+        <button class="btn-primary" onclick="openNeueAufgabe()">+ Neue Aufgabe</button>
+      </div>
+      <div class="kanban-board">
+        <div class="kanban-col col-offen"    data-status="Offen"
+          ondragover="dragOver(event)" ondragleave="dragLeave(event)" ondrop="drop(event)">
+          <div class="kanban-col-header">
+            <h3>Offen</h3>
+            <span class="col-count" id="cnt-offen">0</span>
+          </div>
+          <div class="kanban-cards" id="col-Offen"></div>
+        </div>
+        <div class="kanban-col col-inarbeit" data-status="In Arbeit"
+          ondragover="dragOver(event)" ondragleave="dragLeave(event)" ondrop="drop(event)">
+          <div class="kanban-col-header">
+            <h3>In Arbeit</h3>
+            <span class="col-count" id="cnt-inarbeit">0</span>
+          </div>
+          <div class="kanban-cards" id="col-In Arbeit"></div>
+        </div>
+        <div class="kanban-col col-blockiert" data-status="Blockiert"
+          ondragover="dragOver(event)" ondragleave="dragLeave(event)" ondrop="drop(event)">
+          <div class="kanban-col-header">
+            <h3>Blockiert</h3>
+            <span class="col-count" id="cnt-blockiert">0</span>
+          </div>
+          <div class="kanban-cards" id="col-Blockiert"></div>
+        </div>
+        <div class="kanban-col col-erledigt" data-status="Erledigt"
+          ondragover="dragOver(event)" ondragleave="dragLeave(event)" ondrop="drop(event)">
+          <div class="kanban-col-header">
+            <h3>Erledigt</h3>
+            <span class="col-count" id="cnt-erledigt">0</span>
+          </div>
+          <div class="kanban-cards" id="col-Erledigt">
+            <div class="drop-hint" id="erledigt-hint">Aufgabe hierher ziehen<br>um sie abzuschließen</div>
+          </div>
+        </div>
+      </div>
+    </div><!-- /tab-aufgaben -->
+
+    <!-- ═══ Archiv Tab ═══ -->
+    <div id="tab-archiv" class="tab-content">
+      <div class="card">
+        <div class="card-title">Erledigte Aufgaben (Archiv)</div>
+        <div id="archiv-container"></div>
+      </div>
+    </div>
+
+  </div><!-- /main -->
+</div><!-- /app -->
+
+<!-- ═══ Modal: Task Detail/Edit ═══ -->
+<div id="modal-task" class="modal-overlay" onclick="closeModalIfOutside(event, 'modal-task')">
+  <div class="modal-box">
+    <div class="modal-header">
+      <h3 id="modal-task-title">Aufgabe</h3>
+      <button class="modal-close" onclick="closeModal('modal-task')">✕</button>
+    </div>
+    <div class="modal-body" id="modal-task-body"></div>
+    <div class="modal-footer" id="modal-task-footer"></div>
+  </div>
+</div>
+
+<!-- ═══ Modal: Neue Aufgabe ═══ -->
+<div id="modal-neue" class="modal-overlay" onclick="closeModalIfOutside(event, 'modal-neue')">
+  <div class="modal-box">
+    <div class="modal-header">
+      <h3>Neue Aufgabe</h3>
+      <button class="modal-close" onclick="closeModal('modal-neue')">✕</button>
+    </div>
+    <div class="modal-body">
+      <form id="neue-aufgabe-form" onsubmit="submitNeueAufgabe(event)">
+        <div class="form-group" style="margin-bottom:14px">
+          <label>Titel *</label>
+          <input type="text" id="na-titel" required placeholder="Aufgabentitel…">
+        </div>
+        <div class="form-row" style="margin-bottom:14px">
+          <div class="form-group">
+            <label>Priorität</label>
+            <select id="na-prioritaet">
+              <option>Hoch</option>
+              <option selected>Mittel</option>
+              <option>Niedrig</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Notiz</label>
+          <textarea id="na-notiz" placeholder="Optionale Notiz…" rows="3"></textarea>
+        </div>
+        <div class="modal-footer" style="padding:16px 0 0;border-top:none">
+          <button type="button" class="btn-secondary" onclick="closeModal('modal-neue')">Abbrechen</button>
+          <button type="submit" class="btn-primary">Erstellen</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ Modal: Zeit bearbeiten ═══ -->
+<div id="modal-zeit" class="modal-overlay" onclick="closeModalIfOutside(event, 'modal-zeit')">
+  <div class="modal-box">
+    <div class="modal-header">
+      <h3>Zeit bearbeiten</h3>
+      <button class="modal-close" onclick="closeModal('modal-zeit')">✕</button>
+    </div>
+    <div class="modal-body">
+      <form id="edit-zeit-form" onsubmit="submitEditZeit(event)">
+        <input type="hidden" id="ez-id">
+        <div class="form-row">
+          <div class="form-group">
+            <label>Datum</label>
+            <input type="date" id="ez-datum" required>
+          </div>
+          <div class="form-group">
+            <label>Von</label>
+            <input type="time" id="ez-start" required>
+          </div>
+          <div class="form-group">
+            <label>Bis</label>
+            <input type="time" id="ez-end" required>
+          </div>
+          <div class="form-group">
+            <label>Pause (Min)</label>
+            <input type="number" id="ez-pause" min="0">
+          </div>
+        </div>
+        <div class="modal-footer" style="padding:16px 0 0;border-top:none">
+          <button type="button" class="btn-secondary" onclick="closeModal('modal-zeit')">Abbrechen</button>
+          <button type="submit" class="btn-primary">Speichern</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Toasts -->
+<div id="toast-container"></div>
+
+<script>
+// ══════════════════════════════════════════════════════════════════════
+//  STATE
+// ══════════════════════════════════════════════════════════════════════
+const S = {
+  role: null,
+  code: null,
+  tab: 'zeiten',
+  view: 'woche',
+  weekDatum: todayStr(),    // ISO date of any day in displayed week
+  jahr: new Date().getFullYear(),
+  stats: null,
+  aufgaben: [],
+  archiv: [],
+  wochenDaten: null,
+  jahresDaten: null,
+  wochenEintraege: [],
+  timer: { active: false, start: null, tid: null }
+};
+
+// ══════════════════════════════════════════════════════════════════════
+//  HELPERS
+// ══════════════════════════════════════════════════════════════════════
+function todayStr() {
+  const d = new Date();
+  return d.getFullYear() + '-' + p2(d.getMonth()+1) + '-' + p2(d.getDate());
+}
+function p2(n){ return String(n).padStart(2,'0') }
+function fmt(iso){
+  if(!iso) return '–';
+  const d = new Date(iso.includes('T') ? iso : iso + 'T00:00:00');
+  return d.toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'numeric'});
+}
+function fmtTime(iso){
+  if(!iso) return '–';
+  const d = new Date(iso.includes('T') ? iso : iso + 'T00:00:00');
+  return d.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'});
+}
+function minToH(m){ return (m/60).toFixed(1)+'h' }
+function secToHMS(s){
+  const h = Math.floor(s/3600), m = Math.floor((s%3600)/60), sec = s%60;
+  return p2(h)+':'+p2(m)+':'+p2(sec);
+}
+function wochenTagKurz(dateStr){
+  const d = new Date(dateStr+'T12:00:00');
+  return ['So','Mo','Di','Mi','Do','Fr','Sa'][d.getDay()];
+}
+const MONATE_KURZ = ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
+
+// ══════════════════════════════════════════════════════════════════════
+//  AUTH
+// ══════════════════════════════════════════════════════════════════════
+function initAuth(){
+  const p = window.location.pathname;
+  const m = p.match(/^\/mitarbeiter\/(.+)$/);
+  const c = p.match(/^\/chef\/(.+)$/);
+  const d = p.match(/^\/demo\/(.+)$/);
+  if(m){ S.role='mitarbeiter'; S.code=m[1]; return true; }
+  if(c){ S.role='chef';        S.code=c[1]; return true; }
+  if(d){ S.role='demo';        S.code=d[1]; return true; }
+  return false;
+}
+
+// ══════════════════════════════════════════════════════════════════════
+//  API
+// ══════════════════════════════════════════════════════════════════════
+async function api(url, opts={}){
+  if(S.role === 'demo') return demoApi(url, opts);
+  const res = await fetch(url, {
+    ...opts,
+    headers: { 'Content-Type':'application/json', 'X-Auth-Code':S.code, ...(opts.headers||{}) }
+  });
+  if(!res.ok){
+    const e = await res.json().catch(()=>({error:'Unbekannter Fehler'}));
+    throw new Error(e.error || 'API-Fehler');
+  }
+  return res.json();
+}
+
+// ══════════════════════════════════════════════════════════════════════
+//  TOAST
+// ══════════════════════════════════════════════════════════════════════
+function toast(msg, type='success'){
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.textContent = msg;
+  document.getElementById('toast-container').appendChild(el);
+  setTimeout(()=>{ el.classList.add('removing'); setTimeout(()=>el.remove(),300); }, 2800);
+}
+
+// ══════════════════════════════════════════════════════════════════════
+//  MODALS
+// ══════════════════════════════════════════════════════════════════════
+function openModal(id){ document.getElementById(id).classList.add('open') }
+function closeModal(id){ document.getElementById(id).classList.remove('open') }
+function closeModalIfOutside(e, id){
+  if(e.target === document.getElementById(id)) closeModal(id);
+}
+document.addEventListener('keydown', e => {
+  if(e.key==='Escape') document.querySelectorAll('.modal-overlay.open').forEach(m=>m.classList.remove('open'));
+});
+
+// ══════════════════════════════════════════════════════════════════════
+//  TABS
+// ══════════════════════════════════════════════════════════════════════
+function switchTab(tab){
+  S.tab = tab;
+  document.querySelectorAll('.tab-content').forEach(el=>el.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(el=>el.classList.remove('active'));
+  document.getElementById('tab-'+tab).classList.add('active');
+  document.querySelectorAll('.tab-btn').forEach(el=>{
+    if(el.textContent.toLowerCase().includes(tab.slice(0,3))) el.classList.add('active');
+  });
+  renderDashboard();
+  if(tab==='archiv') loadArchiv();
+}
+
+// ══════════════════════════════════════════════════════════════════════
+//  DASHBOARD
+// ══════════════════════════════════════════════════════════════════════
+function renderDashboard(){
+  const el = document.getElementById('dashboard-cards');
+  if(!S.stats){ el.innerHTML=''; return; }
+  const { zeiten, aufgaben, archiv } = S.stats;
+
+  if(S.tab==='zeiten'){
+    el.innerHTML = [
+      dash('Heute', zeiten.heute, 'h', 'blue'),
+      dash('Diese Woche', zeiten.woche, 'h', 'green'),
+      dash('Dieser Monat', zeiten.monat, 'h', 'purple')
+    ].join('');
+  } else if(S.tab==='aufgaben'){
+    el.innerHTML = [
+      dash('Offen',    aufgaben.Offen,      '', 'blue'),
+      dash('In Arbeit',aufgaben['In Arbeit'],'','amber'),
+      dash('Blockiert',aufgaben.Blockiert,   '', 'red'),
+      dash('Archiviert',archiv.total,         '', 'green')
+    ].join('');
+  } else {
+    el.innerHTML = dash('Archivierte Aufgaben', archiv.total, '', 'purple');
+  }
+}
+function dash(label, value, unit, color){
+  return `<div class="dash-card ${color}">
+    <div class="dash-card-label">${label}</div>
+    <div class="dash-card-value">${value}<span class="dash-card-unit">${unit}</span></div>
+  </div>`;
+}
+
+// ══════════════════════════════════════════════════════════════════════
+//  TIMER
+// ══════════════════════════════════════════════════════════════════════
+function startTimerDisplay(){
+  if(S.timer.tid) clearInterval(S.timer.tid);
+  S.timer.tid = setInterval(updateTimerDisplay, 1000);
+  updateTimerDisplay();
+}
+function updateTimerDisplay(){
+  if(!S.timer.active || !S.timer.start) return;
+  const sec = Math.floor((Date.now() - S.timer.start.getTime()) / 1000);
+  const el = document.getElementById('timer-time');
+  el.textContent = secToHMS(sec);
+  el.className = 'timer-time running';
+  document.getElementById('timer-info').innerHTML =
+    `<span class="pulse"></span>Läuft seit ${fmtTime(S.timer.start.toISOString())} Uhr`;
+}
+function stopTimerDisplay(){
+  if(S.timer.tid){ clearInterval(S.timer.tid); S.timer.tid=null; }
+  document.getElementById('timer-time').textContent = '00:00:00';
+  document.getElementById('timer-time').className = 'timer-time';
+  document.getElementById('timer-info').textContent = 'Keine aktive Zeiterfassung';
+}
+function renderStempelBtn(){
+  const wrap = document.getElementById('stempel-btn-wrap');
+  if(S.role==='chef'){ wrap.innerHTML=''; return; }
+  if(S.timer.active){
+    wrap.innerHTML = `<button class="btn-stempel-stop" onclick="stempelStop()">■ Stopp</button>`;
+  } else {
+    wrap.innerHTML = `<button class="btn-stempel-start" onclick="stempelStart()">▶ Start</button>`;
+  }
+}
+async function stempelStart(){
+  try {
+    const r = await api('/api/stempeluhr/start', { method:'POST' });
+    S.timer.active = true;
+    S.timer.start = new Date(r.start_zeit);
+    startTimerDisplay();
+    renderStempelBtn();
+    toast('Zeiterfassung gestartet');
+  } catch(e){ toast(e.message,'error') }
+}
+async function stempelStop(){
+  try {
+    await api('/api/stempeluhr/stop', { method:'POST' });
+    S.timer.active = false;
+    S.timer.start = null;
+    stopTimerDisplay();
+    renderStempelBtn();
+    await loadStats();
+    await loadWocheChart();
+    await loadWochenEintraege();
+    renderDashboard();
+    toast('Zeiterfassung gestoppt und gespeichert');
+  } catch(e){ toast(e.message,'error') }
+}
+
+// ══════════════════════════════════════════════════════════════════════
+//  ZEITEN
+// ══════════════════════════════════════════════════════════════════════
+async function loadStats(){
+  S.stats = await api('/api/stats');
+  renderDashboard();
+}
+function setView(v){
+  S.view = v;
+  document.getElementById('vbtn-woche').classList.toggle('active', v==='woche');
+  document.getElementById('vbtn-monat').classList.toggle('active', v==='monat');
+  document.getElementById('chart-woche').style.display = v==='woche' ? '' : 'none';
+  document.getElementById('chart-monat').style.display = v==='monat' ? '' : 'none';
+  document.getElementById('entries-card').style.display = v==='woche' ? '' : 'none';
+  if(v==='woche') loadWocheChart();
+  else loadMonatChart();
+}
+
+// ── Wochenchart ────────────────────────────────────────
+function addDays(dateStr, n){
+  const d = new Date(dateStr+'T12:00:00');
+  d.setDate(d.getDate()+n);
+  return d.getFullYear()+'-'+p2(d.getMonth()+1)+'-'+p2(d.getDate());
+}
+function isSameWeekAsToday(dateStr){
+  const d = new Date(dateStr+'T12:00:00');
+  const t = new Date();
+  const sow = (dt) => { const x = new Date(dt); x.setDate(x.getDate()-(x.getDay()||7)+1); return x.toDateString(); };
+  return sow(d) === sow(t);
+}
+async function loadWocheChart(){
+  S.wochenDaten = await api(`/api/charts/woche?datum=${S.weekDatum}`);
+  renderWocheChart();
+  await loadWochenEintraege();
+}
+function renderWocheChart(){
+  const data = S.wochenDaten;
+  if(!data) return;
+  const heute = todayStr();
+  const max = Math.max(...data.tage.map(t=>t.minuten), 1);
+
+  const label = `${fmt(data.von)} – ${fmt(data.bis)}`;
+  const total = `  Gesamt: ${data.total}h`;
+  document.getElementById('woche-label').textContent = label;
+  document.getElementById('woche-total').textContent = total;
+
+  const isCurrentWeek = isSameWeekAsToday(S.weekDatum);
+  document.getElementById('woche-forward-btn').disabled = isCurrentWeek;
+
+  document.getElementById('chart-bars-woche').innerHTML = data.tage.map(t => {
+    const isToday = t.datum === heute;
+    const pct = Math.max(3, (t.minuten/max)*100);
+    const h = t.minuten > 0 ? minToH(t.minuten) : '';
+    return `<div class="chart-col${isToday?' today':''}">
+      <div class="bar-val">${h}</div>
+      <div class="bar-track"><div class="bar${isToday?' today':''}" style="height:${pct}%"></div></div>
+      <div class="bar-lbl">${wochenTagKurz(t.datum)}<br><span style="font-size:.6rem">${t.datum.slice(8)}</span></div>
+    </div>`;
+  }).join('');
+}
+async function navWoche(dir){
+  S.weekDatum = addDays(S.weekDatum, dir*7);
+  await loadWocheChart();
+}
+
+// ── Jahreschart ─────────────────────────────────────────
+async function loadMonatChart(){
+  S.jahresDaten = await api(`/api/charts/monat?jahr=${S.jahr}`);
+  renderMonatChart();
+}
+function renderMonatChart(){
+  const data = S.jahresDaten;
+  if(!data) return;
+  const currentYear = new Date().getFullYear();
+  document.getElementById('monat-label').textContent = `Jahr ${data.jahr}`;
+  document.getElementById('jahr-forward-btn').disabled = data.jahr >= currentYear;
+  const max = Math.max(...data.monate.map(m=>m.minuten), 1);
+  const curMonth = new Date().getMonth()+1;
+
+  document.getElementById('chart-bars-monat').innerHTML = data.monate.map((m,i) => {
+    const isCur = data.jahr===currentYear && m.monat===curMonth;
+    const pct = Math.max(3, (m.minuten/max)*100);
+    const h = m.minuten > 0 ? minToH(m.minuten) : '';
+    return `<div class="chart-col${isCur?' today':''}">
+      <div class="bar-val">${h}</div>
+      <div class="bar-track"><div class="bar${isCur?' today':''}" style="height:${pct}%"></div></div>
+      <div class="bar-lbl">${MONATE_KURZ[i]}</div>
+    </div>`;
+  }).join('');
+}
+async function navJahr(dir){
+  S.jahr += dir;
+  await loadMonatChart();
+}
+
+// ── Einträge ─────────────────────────────────────────────
+async function loadWochenEintraege(){
+  if(!S.wochenDaten) return;
+  S.wochenEintraege = await api(`/api/zeiten?von=${S.wochenDaten.von}&bis=${S.wochenDaten.bis}`);
+  renderWochenEintraege();
+}
+function renderWochenEintraege(){
+  const con = document.getElementById('entries-container');
+  document.getElementById('entries-title').textContent = `Einträge ${fmt(S.wochenDaten?.von)} – ${fmt(S.wochenDaten?.bis)}`;
+  if(!S.wochenEintraege.length){
+    con.innerHTML = '<div class="empty-state">Keine Einträge in diesem Zeitraum</div>';
+    return;
+  }
+  const canEdit = S.role==='mitarbeiter' || S.role==='demo';
+  con.innerHTML = `<div class="entries-table-wrap"><table class="entries-table">
+    <thead><tr>
+      <th>Datum</th><th>Tag</th><th>Von</th><th>Bis</th>
+      <th>Pause</th><th>Netto</th>${canEdit?'<th></th>':''}
+    </tr></thead>
+    <tbody>${S.wochenEintraege.map(e=>`
+      <tr>
+        <td>${fmt(e.datum)}</td>
+        <td>${wochenTagKurz(e.datum)}</td>
+        <td>${e.start_zeit}</td>
+        <td>${e.end_zeit}</td>
+        <td>${e.pause_minuten > 0 ? e.pause_minuten+'min' : '–'}</td>
+        <td><span class="duration-badge">${minToH(e.dauer_minuten)}</span></td>
+        ${canEdit?`<td><div class="actions">
+          <button class="btn-icon" onclick="openEditZeit(${e.id},'${e.datum}','${e.start_zeit}','${e.end_zeit}',${e.pause_minuten})">✏</button>
+          <button class="btn-icon del" onclick="deleteZeit(${e.id})">✕</button>
+        </div></td>`:''}
+      </tr>`).join('')}
+    </tbody>
+  </table></div>`;
+}
+
+// ── Manueller Eintrag ────────────────────────────────────
+async function submitManualEntry(e){
+  e.preventDefault();
+  const body = {
+    datum:          document.getElementById('me-datum').value,
+    start_zeit:     document.getElementById('me-start').value,
+    end_zeit:       document.getElementById('me-end').value,
+    pause_minuten:  Number(document.getElementById('me-pause').value)||0
+  };
+  try {
+    await api('/api/zeiten', { method:'POST', body:JSON.stringify(body) });
+    document.getElementById('manual-form').reset();
+    document.getElementById('me-datum').value = todayStr();
+    await loadStats();
+    await loadWocheChart();
+    renderDashboard();
+    toast('Eintrag gespeichert');
+  } catch(err){ toast(err.message,'error') }
+}
+
+// ── Zeit bearbeiten ──────────────────────────────────────
+function openEditZeit(id, datum, start, end, pause){
+  document.getElementById('ez-id').value = id;
+  document.getElementById('ez-datum').value = datum;
+  document.getElementById('ez-start').value = start;
+  document.getElementById('ez-end').value = end;
+  document.getElementById('ez-pause').value = pause;
+  openModal('modal-zeit');
+}
+async function submitEditZeit(e){
+  e.preventDefault();
+  const id = document.getElementById('ez-id').value;
+  const body = {
+    datum:         document.getElementById('ez-datum').value,
+    start_zeit:    document.getElementById('ez-start').value,
+    end_zeit:      document.getElementById('ez-end').value,
+    pause_minuten: Number(document.getElementById('ez-pause').value)||0
+  };
+  try {
+    await api(`/api/zeiten/${id}`, { method:'PUT', body:JSON.stringify(body) });
+    closeModal('modal-zeit');
+    await loadStats();
+    await loadWocheChart();
+    renderDashboard();
+    toast('Eintrag aktualisiert');
+  } catch(err){ toast(err.message,'error') }
+}
+async function deleteZeit(id){
+  if(!confirm('Diesen Eintrag wirklich löschen?')) return;
+  try {
+    await api(`/api/zeiten/${id}`, { method:'DELETE' });
+    await loadStats();
+    await loadWocheChart();
+    renderDashboard();
+    toast('Eintrag gelöscht');
+  } catch(err){ toast(err.message,'error') }
+}
+
+// ══════════════════════════════════════════════════════════════════════
+//  AUFGABEN / KANBAN
+// ══════════════════════════════════════════════════════════════════════
+async function loadAufgaben(){
+  S.aufgaben = await api('/api/aufgaben');
+  renderKanban();
+}
+function renderKanban(){
+  const statuses = ['Offen','In Arbeit','Blockiert','Erledigt'];
+  const cntMap = { 'Offen':0, 'In Arbeit':0, 'Blockiert':0, 'Erledigt':0 };
+  statuses.forEach(st => {
+    const col = document.getElementById(`col-${st}`);
+    if(!col) return;
+    const cards = S.aufgaben.filter(a=>a.status===st);
+    cntMap[st] = cards.length;
+    if(st==='Erledigt'){
+      // show hint only
+      return;
+    }
+    if(!cards.length){
+      col.innerHTML = '<div class="drop-hint">Keine Aufgaben</div>';
+    } else {
+      col.innerHTML = cards.map(card => renderCard(card)).join('');
+      if(S.role==='mitarbeiter' || S.role==='demo'){
+        col.querySelectorAll('.task-card').forEach(el=>{
+          el.addEventListener('dragstart', dragStart);
+          el.addEventListener('dragend', dragEnd);
+          addTouchDrag(el);
+        });
+      }
+    }
+  });
+  document.getElementById('cnt-offen').textContent = cntMap['Offen'];
+  document.getElementById('cnt-inarbeit').textContent = cntMap['In Arbeit'];
+  document.getElementById('cnt-blockiert').textContent = cntMap['Blockiert'];
+  document.getElementById('cnt-erledigt').textContent = cntMap['Erledigt'];
+}
+function renderCard(a){
+  const prioKey = a.prioritaet.toLowerCase();
+  const drag = (S.role==='mitarbeiter' || S.role==='demo') ? 'draggable="true"' : '';
+  const chefBadge = a.erstellt_von==='chef' ? `<span class="chef-badge">Chef</span>` : '';
+  return `<div class="task-card prio-${prioKey}" data-task-id="${a.id}" ${drag} onclick="openTaskModal(${a.id})">
+    <div class="task-card-top">
+      <div class="task-titel">${esc(a.titel)}</div>
+      <div class="task-badges">
+        <span class="prio-badge ${prioKey}">${a.prioritaet}</span>
+        ${chefBadge}
+      </div>
+    </div>
+    ${a.notiz ? `<div class="task-notiz">${esc(a.notiz)}</div>` : ''}
+    <div class="task-footer">
+      <span class="task-date">${fmt(a.erstellt_am)}</span>
+    </div>
+  </div>`;
+}
+function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') }
+
+// ── Mouse Drag & Drop ────────────────────────────────────
+let dragId = null;
+function dragStart(e){
+  dragId = e.currentTarget.dataset.taskId;
+  e.currentTarget.classList.add('dragging');
+  e.dataTransfer.effectAllowed = 'move';
+}
+function dragEnd(e){ e.currentTarget.classList.remove('dragging') }
+function dragOver(e){
+  e.preventDefault();
+  e.currentTarget.closest('.kanban-col').classList.add('drag-over');
+}
+function dragLeave(e){
+  if(!e.currentTarget.contains(e.relatedTarget))
+    e.currentTarget.closest('.kanban-col').classList.remove('drag-over');
+}
+async function drop(e){
+  e.preventDefault();
+  const col = e.currentTarget.closest('.kanban-col');
+  col.classList.remove('drag-over');
+  if(!dragId) return;
+  const newStatus = col.dataset.status;
+  const task = S.aufgaben.find(a=>String(a.id)===String(dragId));
+  if(task && task.status===newStatus){ dragId=null; return; }
+  try {
+    const res = await api(`/api/aufgaben/${dragId}/status`,
+      { method:'PATCH', body:JSON.stringify({status:newStatus}) });
+    dragId = null;
+    await loadAufgaben();
+    await loadStats();
+    renderDashboard();
+    if(res.archiviert) toast('Aufgabe erledigt und archiviert ✓');
+    else toast(`Verschoben nach: ${newStatus}`);
+  } catch(err){ dragId=null; toast(err.message,'error') }
+}
+
+// ── Touch Drag & Drop (Handy) ────────────────────────────
+let tId=null, tClone=null, tDragging=false;
+let tStartX=0, tStartY=0, tOfsX=0, tOfsY=0;
+
+function addTouchDrag(el){
+  el.addEventListener('touchstart', onTouchStart, {passive:true});
+  el.addEventListener('touchmove',  onTouchMove,  {passive:false});
+  el.addEventListener('touchend',   onTouchEnd);
+  el.addEventListener('touchcancel',onTouchCancel);
+}
+
+function onTouchStart(e){
+  const t = e.touches[0];
+  tId = e.currentTarget.dataset.taskId;
+  tStartX = t.clientX; tStartY = t.clientY;
+  tDragging = false; tClone = null;
+}
+
+function onTouchMove(e){
+  if(!tId) return;
+  const t = e.touches[0];
+  const dx = t.clientX - tStartX, dy = t.clientY - tStartY;
+
+  // Erst nach 10px Bewegung Drag starten
+  if(!tDragging && Math.hypot(dx, dy) < 10) return;
+
+  if(!tDragging){
+    tDragging = true;
+    const card = document.querySelector(`.task-card[data-task-id="${tId}"]`);
+    if(!card){ tId=null; return; }
+    const r = card.getBoundingClientRect();
+    tOfsX = tStartX - r.left; tOfsY = tStartY - r.top;
+    tClone = card.cloneNode(true);
+    Object.assign(tClone.style, {
+      position:'fixed', width:r.width+'px', zIndex:'9999',
+      opacity:'0.85', pointerEvents:'none', borderRadius:'var(--r-sm)',
+      boxShadow:'0 10px 28px rgba(0,0,0,.55)', transform:'scale(1.04)',
+      transition:'none', left:(tStartX-tOfsX)+'px', top:(tStartY-tOfsY)+'px'
+    });
+    document.body.appendChild(tClone);
+    card.style.opacity = '0.3';
+  }
+
+  // Klon bewegen & Zielspalte hervorheben
+  tClone.style.left = (t.clientX - tOfsX)+'px';
+  tClone.style.top  = (t.clientY - tOfsY)+'px';
+  tClone.style.display = 'none';
+  const under = document.elementFromPoint(t.clientX, t.clientY);
+  tClone.style.display = '';
+  document.querySelectorAll('.kanban-col').forEach(c=>c.classList.remove('drag-over'));
+  under?.closest('.kanban-col')?.classList.add('drag-over');
+
+  e.preventDefault();
+}
+
+async function onTouchEnd(e){
+  if(!tDragging || !tId){ tId=null; tDragging=false; return; }
+  const t = e.changedTouches[0];
+  _touchCleanup();
+
+  tClone = null; // schon entfernt
+  const under = document.elementFromPoint(t.clientX, t.clientY);
+  const col = under?.closest('.kanban-col');
+  const id = tId; tId=null; tDragging=false;
+  if(!col) return;
+
+  const newStatus = col.dataset.status;
+  const task = S.aufgaben.find(a=>String(a.id)===String(id));
+  if(task && task.status===newStatus) return;
+  try {
+    const res = await api(`/api/aufgaben/${id}/status`,
+      {method:'PATCH', body:JSON.stringify({status:newStatus})});
+    await loadAufgaben(); await loadStats(); renderDashboard();
+    if(res.archiviert) toast('Aufgabe erledigt und archiviert ✓');
+    else toast(`Verschoben nach: ${newStatus}`);
+  } catch(err){ toast(err.message,'error') }
+}
+
+function onTouchCancel(){ _touchCleanup(); tId=null; tDragging=false; }
+
+function _touchCleanup(){
+  if(tClone){ tClone.remove(); tClone=null; }
+  document.querySelectorAll('.kanban-col').forEach(c=>c.classList.remove('drag-over'));
+  if(tId) document.querySelector(`.task-card[data-task-id="${tId}"]`)?.style.removeProperty('opacity');
+}
+
+// ── Neue Aufgabe ─────────────────────────────────────────
+function openNeueAufgabe(){
+  document.getElementById('na-titel').value='';
+  document.getElementById('na-prioritaet').value='Mittel';
+  document.getElementById('na-notiz').value='';
+  openModal('modal-neue');
+  setTimeout(()=>document.getElementById('na-titel').focus(), 50);
+}
+async function submitNeueAufgabe(e){
+  e.preventDefault();
+  const body = {
+    titel:     document.getElementById('na-titel').value,
+    prioritaet:document.getElementById('na-prioritaet').value,
+    notiz:     document.getElementById('na-notiz').value
+  };
+  try {
+    await api('/api/aufgaben', { method:'POST', body:JSON.stringify(body) });
+    closeModal('modal-neue');
+    await loadAufgaben();
+    await loadStats();
+    renderDashboard();
+    toast('Aufgabe erstellt');
+  } catch(err){ toast(err.message,'error') }
+}
+
+// ── Task Modal ───────────────────────────────────────────
+function openTaskModal(id){
+  const task = S.aufgaben.find(a=>a.id===id);
+  if(!task) return;
+  const isEditor = S.role==='mitarbeiter' || S.role==='demo';
+
+  document.getElementById('modal-task-title').textContent = 'Aufgabe';
+
+  if(isEditor){
+    document.getElementById('modal-task-body').innerHTML = `
+      <div class="form-group" style="margin-bottom:14px">
+        <label>Titel</label>
+        <input type="text" id="mt-titel" value="${esc(task.titel)}">
+      </div>
+      <div class="form-row" style="margin-bottom:14px">
+        <div class="form-group">
+          <label>Priorität</label>
+          <select id="mt-prio">
+            ${['Hoch','Mittel','Niedrig'].map(p=>`<option${task.prioritaet===p?' selected':''}>${p}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Status</label>
+          <select id="mt-status">
+            ${['Offen','In Arbeit','Blockiert'].map(s=>`<option${task.status===s?' selected':''}>${s}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div class="form-group" style="margin-bottom:14px">
+        <label>Notiz</label>
+        <textarea id="mt-notiz" rows="4">${esc(task.notiz)}</textarea>
+      </div>
+      <div class="modal-info-row">
+        <span class="modal-info-label">Erstellt von</span>
+        <span>${task.erstellt_von==='chef' ? '<span class="chef-badge">Chef</span>' : 'Mitarbeiter'}</span>
+      </div>
+      <div class="modal-info-row">
+        <span class="modal-info-label">Erstellt am</span>
+        <span>${fmt(task.erstellt_am)}</span>
+      </div>`;
+    document.getElementById('modal-task-footer').innerHTML = `
+      <button class="btn-danger" onclick="deleteTask(${id})">Löschen</button>
+      <button class="btn-secondary" onclick="closeModal('modal-task')">Abbrechen</button>
+      <button class="btn-primary" onclick="saveTask(${id})">Speichern</button>`;
+  } else {
+    // Chef: read-only view
+    const prioKey = task.prioritaet.toLowerCase();
+    document.getElementById('modal-task-body').innerHTML = `
+      <div class="modal-info-row">
+        <span class="modal-info-label">Titel</span>
+        <strong>${esc(task.titel)}</strong>
+      </div>
+      <div class="modal-info-row">
+        <span class="modal-info-label">Status</span>
+        <span>${task.status}</span>
+      </div>
+      <div class="modal-info-row">
+        <span class="modal-info-label">Priorität</span>
+        <span class="prio-badge ${prioKey}">${task.prioritaet}</span>
+      </div>
+      <div class="modal-info-row">
+        <span class="modal-info-label">Notiz</span>
+        <span style="white-space:pre-wrap">${esc(task.notiz)||'–'}</span>
+      </div>
+      <div class="modal-info-row">
+        <span class="modal-info-label">Erstellt von</span>
+        <span>${task.erstellt_von==='chef' ? '<span class="chef-badge">Chef</span>' : 'Mitarbeiter'}</span>
+      </div>
+      <div class="modal-info-row">
+        <span class="modal-info-label">Erstellt am</span>
+        <span>${fmt(task.erstellt_am)}</span>
+      </div>`;
+    document.getElementById('modal-task-footer').innerHTML =
+      `<button class="btn-secondary" onclick="closeModal('modal-task')">Schließen</button>`;
+  }
+  openModal('modal-task');
+}
+async function saveTask(id){
+  const body = {
+    titel:     document.getElementById('mt-titel').value,
+    prioritaet:document.getElementById('mt-prio').value,
+    notiz:     document.getElementById('mt-notiz').value
+  };
+  const newStatus = document.getElementById('mt-status').value;
+  const task = S.aufgaben.find(a=>a.id===id);
+  try {
+    await api(`/api/aufgaben/${id}`, { method:'PUT', body:JSON.stringify(body) });
+    if(newStatus !== task.status){
+      await api(`/api/aufgaben/${id}/status`, { method:'PATCH', body:JSON.stringify({status:newStatus}) });
+    }
+    closeModal('modal-task');
+    await loadAufgaben();
+    await loadStats();
+    renderDashboard();
+    toast('Aufgabe gespeichert');
+  } catch(err){ toast(err.message,'error') }
+}
+async function deleteTask(id){
+  if(!confirm('Aufgabe wirklich löschen?')) return;
+  try {
+    await api(`/api/aufgaben/${id}`, { method:'DELETE' });
+    closeModal('modal-task');
+    await loadAufgaben();
+    await loadStats();
+    renderDashboard();
+    toast('Aufgabe gelöscht');
+  } catch(err){ toast(err.message,'error') }
+}
+
+// ══════════════════════════════════════════════════════════════════════
+//  ARCHIV
+// ══════════════════════════════════════════════════════════════════════
+async function loadArchiv(){
+  S.archiv = await api('/api/archiv');
+  renderArchiv();
+}
+function renderArchiv(){
+  const con = document.getElementById('archiv-container');
+  if(!S.archiv.length){
+    con.innerHTML = '<div class="empty-state">Noch keine erledigten Aufgaben</div>';
+    return;
+  }
+  con.innerHTML = S.archiv.map(a=>{
+    const prioKey = a.prioritaet.toLowerCase();
+    const chefBadge = a.erstellt_von==='chef' ? `<span class="chef-badge">Chef</span>` : '';
+    return `<div class="archiv-item" onclick="openArchivModal(${a.id})">
+      <div class="archiv-icon">✅</div>
+      <div class="archiv-body">
+        <div class="archiv-titel">
+          ${esc(a.titel)}
+          <span class="prio-badge ${prioKey}">${a.prioritaet}</span>
+          ${chefBadge}
+        </div>
+        ${a.notiz ? `<div class="archiv-notiz">${esc(a.notiz)}</div>` : ''}
+        <div class="archiv-meta">
+          <span>Erstellt: ${fmt(a.erstellt_am)}</span>
+          <span>Erledigt: ${fmt(a.erledigt_am)}</span>
+          <span>Von: ${a.erstellt_von==='chef' ? 'Chef' : 'Mitarbeiter'}</span>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── Archiv Modal ─────────────────────────────────────────
+function openArchivModal(id){
+  const a = S.archiv.find(x=>x.id===id);
+  if(!a) return;
+  const prioKey = a.prioritaet.toLowerCase();
+  const chefBadge = a.erstellt_von==='chef' ? `<span class="chef-badge">Chef</span>` : 'Mitarbeiter';
+  document.getElementById('modal-task-title').textContent = a.titel;
+  document.getElementById('modal-task-body').innerHTML = `
+    <div class="modal-info-row">
+      <span class="modal-info-label">Priorität</span>
+      <span class="prio-badge ${prioKey}">${a.prioritaet}</span>
+    </div>
+    <div class="modal-info-row">
+      <span class="modal-info-label">Notiz</span>
+      <span style="white-space:pre-wrap">${esc(a.notiz)||'–'}</span>
+    </div>
+    <div class="modal-info-row">
+      <span class="modal-info-label">Erstellt von</span>
+      <span>${chefBadge}</span>
+    </div>
+    <div class="modal-info-row">
+      <span class="modal-info-label">Erstellt am</span>
+      <span>${fmt(a.erstellt_am)}</span>
+    </div>
+    <div class="modal-info-row">
+      <span class="modal-info-label">Erledigt am</span>
+      <span>${fmt(a.erledigt_am)}</span>
+    </div>`;
+  document.getElementById('modal-task-footer').innerHTML = `
+    <button class="btn-danger" onclick="deleteArchivItem(${id})">Löschen</button>
+    <button class="btn-secondary" onclick="closeModal('modal-task')">Schließen</button>`;
+  openModal('modal-task');
+}
+
+async function deleteArchivItem(id){
+  if(!confirm('Diesen Archiveintrag wirklich löschen?')) return;
+  try {
+    await api(`/api/archiv/${id}`, { method:'DELETE' });
+    closeModal('modal-task');
+    await loadArchiv();
+    await loadStats();
+    renderDashboard();
+    toast('Archiveintrag gelöscht');
+  } catch(err){ toast(err.message,'error') }
+}
+
+// ══════════════════════════════════════════════════════════════════════
+//  DEMO – LocalStorage-Schicht
+// ══════════════════════════════════════════════════════════════════════
+function demoSeedIfNeeded() {
+  const raw = localStorage.getItem('demo_zeiten');
+  if (raw && JSON.parse(raw).length > 0) return; // bereits initialisiert
+
+  // Letzte 10 Werktage rückwärts vom heutigen Tag
+  const werktage = [];
+  const d = new Date();
+  while (werktage.length < 10) {
+    d.setDate(d.getDate() - 1);
+    if (d.getDay() !== 0 && d.getDay() !== 6)
+      werktage.push(d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate()));
+  }
+
+  const vorlagen = [
+    ['08:15','17:00',45],['09:00','18:30',60],['08:45','16:15',30],
+    ['08:00','17:00',30],['09:15','17:45',45],['08:30','16:30',30],
+    ['08:00','16:45',45],['09:00','17:30',30],['08:15','16:00',45],
+    ['09:30','18:00',60]
+  ];
+
+  function berechneDauer(datum, s, e, pause) {
+    const ms = new Date(`${datum}T${s}:00`).getTime();
+    let   me = new Date(`${datum}T${e}:00`).getTime();
+    if (me <= ms) me += 86_400_000;
+    return Math.max(0, Math.round((me - ms) / 60_000) - Number(pause));
+  }
+
+  const zeiten = werktage.map((datum, i) => {
+    const [s, e, pause] = vorlagen[i];
+    return { id: i + 1, datum, start_zeit: s, end_zeit: e,
+      pause_minuten: pause, dauer_minuten: berechneDauer(datum, s, e, pause),
+      erstellt_am: datum + 'T08:00:00' };
+  });
+  localStorage.setItem('demo_zeiten',          JSON.stringify(zeiten));
+  localStorage.setItem('demo_nextid_zeiten',   zeiten.length);
+
+  const jetzt = new Date();
+  const vor = tage => new Date(jetzt.getTime() - tage * 86_400_000).toISOString();
+
+  const aufgaben = [
+    { id:1, titel:'Dokumentation schreiben', prioritaet:'Mittel', notiz:'API-Dokumentation vervollständigen',
+      status:'Offen',     erstellt_von:'mitarbeiter', erstellt_am:vor(5), aktualisiert_am:vor(1) },
+    { id:2, titel:'Login-Seite gestalten',   prioritaet:'Hoch',   notiz:'Responsives Design, Dark Mode',
+      status:'In Arbeit', erstellt_von:'mitarbeiter', erstellt_am:vor(3), aktualisiert_am:vor(1) },
+    { id:3, titel:'API-Anbindung testen',    prioritaet:'Hoch',   notiz:'Warte auf Backend-Fix',
+      status:'Blockiert', erstellt_von:'chef',        erstellt_am:vor(2), aktualisiert_am:vor(0) }
+  ];
+  localStorage.setItem('demo_aufgaben',        JSON.stringify(aufgaben));
+  localStorage.setItem('demo_nextid_aufgaben', 3);
+
+  const archiv = [
+    { id:1, aufgabe_id:null, titel:'Datenbank aufsetzen',  prioritaet:'Niedrig', notiz:'',
+      erstellt_von:'mitarbeiter', erstellt_am:vor(14), erledigt_am:vor(10) },
+    { id:2, aufgabe_id:null, titel:'Server konfigurieren', prioritaet:'Mittel',  notiz:'Nginx + SSL',
+      erstellt_von:'chef',        erstellt_am:vor(12), erledigt_am:vor(8) }
+  ];
+  localStorage.setItem('demo_archiv',          JSON.stringify(archiv));
+  localStorage.setItem('demo_nextid_archiv',   2);
+}
+
+async function demoApi(url, opts = {}) {
+  const method = (opts.method || 'GET').toUpperCase();
+  const body   = opts.body ? JSON.parse(opts.body) : null;
+  const [pathPart, qsPart] = url.split('?');
+  const qs = {};
+  if (qsPart) qsPart.split('&').forEach(p => {
+    const [k, ...vs] = p.split('=');
+    qs[decodeURIComponent(k)] = decodeURIComponent(vs.join('=') || '');
+  });
+  const path = pathPart;
+
+  // LocalStorage-Helfer
+  function lsGet(key, fb = []) {
+    const raw = localStorage.getItem(key);
+    if (raw === null) return fb;
+    try { return JSON.parse(raw); } catch { return fb; }
+  }
+  function lsSet(key, val) { localStorage.setItem(key, JSON.stringify(val)); }
+  function nextId(col) {
+    const k = 'demo_nextid_' + col;
+    const n = (parseInt(localStorage.getItem(k)) || 0) + 1;
+    localStorage.setItem(k, n);
+    return n;
+  }
+  function calcDauer(datum, s, e, pause) {
+    const ms = new Date(`${datum}T${s}:00`).getTime();
+    let   me = new Date(`${datum}T${e}:00`).getTime();
+    if (me <= ms) me += 86_400_000;
+    return Math.max(0, Math.round((me - ms) / 60_000) - Number(pause));
+  }
+  function nowIso() { return new Date().toISOString(); }
+  function wochenMo(dateStr) {
+    const d = new Date(dateStr + 'T12:00:00');
+    const dow = d.getDay();
+    d.setDate(d.getDate() - (dow === 0 ? 6 : dow - 1));
+    return d;
+  }
+
+  // ID aus Pfad extrahieren  z.B. /api/zeiten/5 → 5
+  const idM  = path.match(/\/(\d+)(?:\/|$)/);
+  const urlId = idM ? parseInt(idM[1]) : null;
+
+  // ── /api/stats ────────────────────────────────────────
+  if (path === '/api/stats' && method === 'GET') {
+    const zeiten   = lsGet('demo_zeiten');
+    const aufgaben = lsGet('demo_aufgaben');
+    const archiv   = lsGet('demo_archiv');
+    const heute    = todayStr();
+    const now = new Date(), dow = now.getDay();
+    const mo  = new Date(now); mo.setDate(now.getDate() - (dow === 0 ? 6 : dow - 1));
+    const wStr = mo.getFullYear() + '-' + p2(mo.getMonth() + 1) + '-' + p2(mo.getDate());
+    const mStr = heute.slice(0, 8) + '01';
+    const toH  = m => +(m / 60).toFixed(1);
+    const hMin = zeiten.filter(z => z.datum === heute).reduce((s, z) => s + z.dauer_minuten, 0);
+    const wMin = zeiten.filter(z => z.datum >= wStr).reduce((s, z) => s + z.dauer_minuten, 0);
+    const mMin = zeiten.filter(z => z.datum >= mStr).reduce((s, z) => s + z.dauer_minuten, 0);
+    const cnt  = { Offen: 0, 'In Arbeit': 0, Blockiert: 0 };
+    aufgaben.filter(a => a.status !== 'Erledigt').forEach(a => { if (cnt[a.status] !== undefined) cnt[a.status]++; });
+    return { zeiten: { heute: toH(hMin), woche: toH(wMin), monat: toH(mMin) }, aufgaben: cnt, archiv: { total: archiv.length } };
+  }
+
+  // ── /api/stempeluhr ───────────────────────────────────
+  if (path === '/api/stempeluhr' && method === 'GET') {
+    return lsGet('demo_stempeluhr', null);
+  }
+  if (path === '/api/stempeluhr/start' && method === 'POST') {
+    if (lsGet('demo_stempeluhr', null)) throw new Error('Stempeluhr läuft bereits');
+    const s = { start_zeit: nowIso() };
+    lsSet('demo_stempeluhr', s);
+    return s;
+  }
+  if (path === '/api/stempeluhr/stop' && method === 'POST') {
+    const row = lsGet('demo_stempeluhr', null);
+    if (!row) throw new Error('Stempeluhr läuft nicht');
+    const start = new Date(row.start_zeit), end = new Date();
+    const datum = start.getFullYear() + '-' + p2(start.getMonth() + 1) + '-' + p2(start.getDate());
+    const sz    = p2(start.getHours()) + ':' + p2(start.getMinutes());
+    const ez    = p2(end.getHours())   + ':' + p2(end.getMinutes());
+    const dauer = Math.max(0, Math.round((end - start) / 60_000));
+    const entry = { id: nextId('zeiten'), datum, start_zeit: sz, end_zeit: ez,
+      pause_minuten: 0, dauer_minuten: dauer, erstellt_am: nowIso() };
+    const zeiten = lsGet('demo_zeiten'); zeiten.push(entry);
+    lsSet('demo_zeiten', zeiten);
+    lsSet('demo_stempeluhr', null);
+    return entry;
+  }
+
+  // ── /api/zeiten ───────────────────────────────────────
+  if (path === '/api/zeiten' && method === 'GET') {
+    let zeiten = lsGet('demo_zeiten');
+    if (qs.von && qs.bis)
+      return zeiten.filter(z => z.datum >= qs.von && z.datum <= qs.bis)
+        .sort((a, b) => a.datum.localeCompare(b.datum) || a.start_zeit.localeCompare(b.start_zeit));
+    return zeiten.sort((a, b) => b.datum.localeCompare(a.datum) || b.start_zeit.localeCompare(a.start_zeit)).slice(0, 500);
+  }
+  if (path === '/api/zeiten' && method === 'POST') {
+    const { datum, start_zeit, end_zeit, pause_minuten = 0 } = body;
+    if (!datum || !start_zeit || !end_zeit) throw new Error('Pflichtfelder fehlen');
+    const dauer = calcDauer(datum, start_zeit, end_zeit, pause_minuten);
+    const entry = { id: nextId('zeiten'), datum, start_zeit, end_zeit,
+      pause_minuten: Number(pause_minuten), dauer_minuten: dauer, erstellt_am: nowIso() };
+    const zeiten = lsGet('demo_zeiten'); zeiten.push(entry);
+    lsSet('demo_zeiten', zeiten);
+    return entry;
+  }
+  if (path.match(/^\/api\/zeiten\/\d+$/) && method === 'PUT') {
+    const { datum, start_zeit, end_zeit, pause_minuten = 0 } = body;
+    const dauer  = calcDauer(datum, start_zeit, end_zeit, pause_minuten);
+    const zeiten = lsGet('demo_zeiten');
+    const idx    = zeiten.findIndex(z => z.id === urlId);
+    if (idx === -1) throw new Error('Nicht gefunden');
+    zeiten[idx]  = { ...zeiten[idx], datum, start_zeit, end_zeit,
+      pause_minuten: Number(pause_minuten), dauer_minuten: dauer };
+    lsSet('demo_zeiten', zeiten);
+    return zeiten[idx];
+  }
+  if (path.match(/^\/api\/zeiten\/\d+$/) && method === 'DELETE') {
+    lsSet('demo_zeiten', lsGet('demo_zeiten').filter(z => z.id !== urlId));
+    return { success: true };
+  }
+
+  // ── /api/charts ───────────────────────────────────────
+  if (path === '/api/charts/woche' && method === 'GET') {
+    const zeiten = lsGet('demo_zeiten');
+    const mo     = wochenMo(qs.datum || todayStr());
+    const tage   = [];
+    for (let i = 0; i < 7; i++) {
+      const d  = new Date(mo); d.setDate(mo.getDate() + i);
+      const ds = d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate());
+      tage.push({ datum: ds, minuten: zeiten.filter(z => z.datum === ds).reduce((s, z) => s + z.dauer_minuten, 0) });
+    }
+    const totalMin = tage.reduce((s, t) => s + t.minuten, 0);
+    return { tage, total: +(totalMin / 60).toFixed(1), von: tage[0].datum, bis: tage[6].datum };
+  }
+  if (path === '/api/charts/monat' && method === 'GET') {
+    const zeiten = lsGet('demo_zeiten');
+    const jahr   = parseInt(qs.jahr) || new Date().getFullYear();
+    const monate = [];
+    for (let m = 1; m <= 12; m++) {
+      const ms = p2(m);
+      monate.push({ monat: m, minuten: zeiten.filter(z => z.datum.startsWith(`${jahr}-${ms}-`)).reduce((s, z) => s + z.dauer_minuten, 0) });
+    }
+    return { jahr, monate };
+  }
+
+  // ── /api/aufgaben ─────────────────────────────────────
+  if (path === '/api/aufgaben' && method === 'GET') {
+    const prio = { Hoch: 0, Mittel: 1, Niedrig: 2 };
+    return [...lsGet('demo_aufgaben')].sort((a, b) =>
+      (prio[a.prioritaet] ?? 2) - (prio[b.prioritaet] ?? 2) ||
+      b.erstellt_am.localeCompare(a.erstellt_am));
+  }
+  if (path === '/api/aufgaben' && method === 'POST') {
+    const { titel, prioritaet = 'Mittel', notiz = '' } = body;
+    if (!titel?.trim()) throw new Error('Titel fehlt');
+    const entry = { id: nextId('aufgaben'), titel: titel.trim(), prioritaet, notiz,
+      status: 'Offen', erstellt_von: 'demo', erstellt_am: nowIso(), aktualisiert_am: nowIso() };
+    const aufgaben = lsGet('demo_aufgaben'); aufgaben.push(entry);
+    lsSet('demo_aufgaben', aufgaben);
+    return entry;
+  }
+  if (path.match(/^\/api\/aufgaben\/\d+$/) && method === 'PUT') {
+    const { titel, prioritaet, notiz } = body;
+    const aufgaben = lsGet('demo_aufgaben');
+    const idx = aufgaben.findIndex(a => a.id === urlId);
+    if (idx === -1) throw new Error('Nicht gefunden');
+    aufgaben[idx] = { ...aufgaben[idx], titel, prioritaet, notiz: notiz || '', aktualisiert_am: nowIso() };
+    lsSet('demo_aufgaben', aufgaben);
+    return aufgaben[idx];
+  }
+  if (path.match(/^\/api\/aufgaben\/\d+\/status$/) && method === 'PATCH') {
+    const { status } = body;
+    if (!['Offen','In Arbeit','Blockiert','Erledigt'].includes(status)) throw new Error('Ungültiger Status');
+    const aufgaben = lsGet('demo_aufgaben');
+    const idx      = aufgaben.findIndex(a => a.id === urlId);
+    if (idx === -1) throw new Error('Nicht gefunden');
+    const aufgabe  = aufgaben[idx];
+    if (status === 'Erledigt') {
+      const archiv = lsGet('demo_archiv');
+      archiv.unshift({ id: nextId('archiv'), aufgabe_id: aufgabe.id, titel: aufgabe.titel,
+        prioritaet: aufgabe.prioritaet, notiz: aufgabe.notiz, erstellt_von: aufgabe.erstellt_von,
+        erstellt_am: aufgabe.erstellt_am, erledigt_am: nowIso() });
+      lsSet('demo_archiv', archiv);
+      lsSet('demo_aufgaben', aufgaben.filter(a => a.id !== urlId));
+      return { archiviert: true };
+    }
+    aufgaben[idx] = { ...aufgabe, status, aktualisiert_am: nowIso() };
+    lsSet('demo_aufgaben', aufgaben);
+    return aufgaben[idx];
+  }
+  if (path.match(/^\/api\/aufgaben\/\d+$/) && method === 'DELETE') {
+    lsSet('demo_aufgaben', lsGet('demo_aufgaben').filter(a => a.id !== urlId));
+    return { success: true };
+  }
+
+  // ── /api/archiv ───────────────────────────────────────
+  if (path === '/api/archiv' && method === 'GET') {
+    return lsGet('demo_archiv').sort((a, b) => b.erledigt_am.localeCompare(a.erledigt_am));
+  }
+  if (path.match(/^\/api\/archiv\/\d+$/) && method === 'DELETE') {
+    // Archiv-Löschung ist im Demo-Modus nicht erlaubt
+    throw new Error('Im Demo-Modus können Archiveinträge nicht gelöscht werden');
+  }
+
+  throw new Error('Demo-API: Unbekannter Endpunkt ' + path);
+}
+
+// ══════════════════════════════════════════════════════════════════════
+//  INIT
+// ══════════════════════════════════════════════════════════════════════
+async function init(){
+  if(!initAuth()){
+    document.getElementById('loading-screen').style.display='none';
+    document.getElementById('access-denied').style.display='flex';
+    return;
+  }
+
+  // Role chip
+  const chip = document.getElementById('role-chip');
+  chip.textContent = S.role==='mitarbeiter' ? 'Mitarbeiter' : 'Chef';
+  if(S.role==='chef') chip.classList.add('chef');
+
+  // Show manual entry only for Mitarbeiter
+  if(S.role==='mitarbeiter'){
+    document.getElementById('manual-entry-card').style.display='';
+    document.getElementById('me-datum').value = todayStr();
+  }
+
+  // Demo-Ansicht initialisieren
+  if(S.role==='demo'){
+    chip.textContent = 'Demo';
+    document.getElementById('manual-entry-card').style.display='';
+    document.getElementById('me-datum').value = todayStr();
+    demoSeedIfNeeded();
+    document.getElementById('demo-banner').style.display='';
+  }
+
+  // Check running timer
+  try {
+    const timerData = await api('/api/stempeluhr');
+    if(timerData){
+      S.timer.active = true;
+      S.timer.start = new Date(timerData.start_zeit);
+      startTimerDisplay();
+    }
+  } catch(e){ console.warn('Timer check:', e) }
+
+  renderStempelBtn();
+
+  // Load all data
+  await Promise.all([
+    loadStats(),
+    loadWocheChart(),
+    loadAufgaben()
+  ]);
+
+  document.getElementById('loading-screen').style.display='none';
+  document.getElementById('app').style.display='';
+}
+
+init();
+</script>
+</body>
+</html>
