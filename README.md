@@ -18,7 +18,6 @@ At my internship, I needed a tool to track my work hours and keep notes on tasks
 - **Two roles** — Employee (full access) and Boss (read-only for time, can add tasks)
 
 
-> Demo is read-only. You can view times and tasks but not make changes.
 
 ## Tech Stack
 
