@@ -2,20 +2,21 @@
 
 A simple web app to track work hours and manage tasks — built for a small team.
 
+## Demo
+
+-> [Open Demo](https://abdi.silm.dev/demo/063A88368A69)
+
 ## The Story
 
 At my internship, I needed a tool to track my work hours and keep notes on tasks. Instead of using an existing one, I just built my own. With the help of different AI tools, I was able to design, build, and deploy the whole app from scratch.
 
 ## What it does
 
-- ⏱ **Time tracking** — start/stop timer, manual entries, weekly and yearly overview
-- ✅ **Task board** — Kanban board with drag & drop (Open / In Progress / Blocked / Done)
-- 🗂 **Archive** — completed tasks are saved and can never be deleted
-- 👤 **Two roles** — Employee (full access) and Boss (read-only for time, can add tasks)
+- **Time tracking** — start/stop timer, manual entries, weekly and yearly overview
+- **Task board** — Kanban board with drag & drop (Open / In Progress / Blocked / Done)
+- **Archive** — completed tasks are saved and can never be deleted
+- **Two roles** — Employee (full access) and Boss (read-only for time, can add tasks)
 
-## Demo
-
-👉 [Open Demo](https://abdi.silm.dev/demo/063A88368A69)
 
 > Demo is read-only. You can view times and tasks but not make changes.
 
