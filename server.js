@@ -86,6 +86,18 @@ db.exec(`
   );
 `);
 
+// ── Neue Tabelle: Urlaub (bestehende Tabellen werden NICHT verändert) ─────────
+db.exec(`
+  CREATE TABLE IF NOT EXISTS urlaub (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    von_datum   TEXT    NOT NULL,
+    bis_datum   TEXT    NOT NULL,
+    tage_anzahl INTEGER NOT NULL,
+    notiz       TEXT    NOT NULL DEFAULT '',
+    erstellt_am TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now','localtime'))
+  )
+`);
+
 // ── Hilfsfunktionen ───────────────────────────────────────────────────────────
 function datumStr(d) {
   return d.getFullYear() + '-' +
@@ -103,6 +115,66 @@ function wochenStartDatum(ref) {
   const dow = d.getDay();
   d.setDate(d.getDate() - (dow === 0 ? 6 : dow - 1));
   return d;
+}
+
+// ── Gehaltsperiode: Stichtag 15. des Monats ───────────────────────────────────
+const SOLL_STUNDEN_PRO_PERIODE = 35.29;
+// Erste anzuzeigende Periode: 15.05.2026 – 14.06.2026
+const ARBEITSBEGINN  = '2026-05-15';
+// Letzte anzuzeigende Periode beginnt am 15.04.2027 (12 Perioden gesamt)
+const PERIODEN_ENDE  = '2027-04-15';
+
+// Start der Gehaltsperiode zum gegebenen Datum (gibt YYYY-MM-DD zurück)
+function periodeStart(datumStr) {
+  const d = new Date(datumStr + 'T12:00:00');
+  if (d.getDate() >= 15) {
+    return datumStr.slice(0, 8) + '15';
+  }
+  // Vor dem 15. → Periode begann am 15. des Vormonats
+  const prev = new Date(d.getFullYear(), d.getMonth() - 1, 15);
+  return prev.getFullYear() + '-' +
+    String(prev.getMonth() + 1).padStart(2, '0') + '-15';
+}
+
+// Ende der Gehaltsperiode: 14. des auf den Start folgenden Monats
+function periodeEnde(startStr) {
+  const [y, m] = startStr.split('-').map(Number);
+  const next = new Date(y, m, 14); // JS-Monat 0-basiert: m entspricht Folgemonat
+  return next.getFullYear() + '-' +
+    String(next.getMonth() + 1).padStart(2, '0') + '-14';
+}
+
+// Wandelt ein UTC-Date-Objekt in Europe/Berlin Datum + Uhrzeit um
+function berlinZeit(d) {
+  const formatter = new Intl.DateTimeFormat('de-DE', {
+    timeZone: 'Europe/Berlin',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false
+  });
+  const p = Object.fromEntries(formatter.formatToParts(d).map(x => [x.type, x.value]));
+  return { datum: `${p.year}-${p.month}-${p.day}`, zeit: `${p.hour}:${p.minute}` };
+}
+
+// Start des aktuellen Urlaubsjahres (läuft vom 15. Mai bis 14. Mai des Folgejahres)
+function urlaubsjahrVon() {
+  const heute = new Date();
+  const year  = heute.getFullYear();
+  return heute >= new Date(year, 4, 15)
+    ? `${year}-05-15`
+    : `${year - 1}-05-15`;
+}
+
+// Zählt Werktage (Mo–Fr) zwischen zwei Datumsstrings (beide Enden inklusiv)
+function zaehleArbeitstage(vonStr, bisStr) {
+  let count = 0;
+  const d   = new Date(vonStr + 'T12:00:00');
+  const bis = new Date(bisStr + 'T12:00:00');
+  while (d <= bis) {
+    const dow = d.getDay();
+    if (dow !== 0 && dow !== 6) count++;
+    d.setDate(d.getDate() + 1);
+  }
+  return count;
 }
 
 // ── Auth-Middleware ───────────────────────────────────────────────────────────
@@ -204,12 +276,14 @@ app.post('/api/stempeluhr/stop', auth, nurMitarbeiter, (req, res) => {
 
   const start = new Date(row.start_zeit);
   const end   = new Date();
-  const datum = datumStr(start);
-  const dauer = Math.max(0, Math.round((end - start) / 60_000));
+  // Berliner Lokalzeit verwenden – verhindert UTC-Verschiebung auf dem Server
+  const startB = berlinZeit(start);
+  const endB   = berlinZeit(end);
+  const dauer  = Math.max(0, Math.round((end - start) / 60_000));
 
   const r = db.prepare(
     'INSERT INTO zeiten (datum, start_zeit, end_zeit, pause_minuten, dauer_minuten) VALUES (?,?,?,0,?)'
-  ).run(datum, zeitStr(start), zeitStr(end), dauer);
+  ).run(startB.datum, startB.zeit, endB.zeit, dauer);
   db.prepare('DELETE FROM stempeluhr WHERE id = 1').run();
   res.json(db.prepare('SELECT * FROM zeiten WHERE id = ?').get(Number(r.lastInsertRowid)));
 });
@@ -219,13 +293,15 @@ app.get('/api/stats', auth, (req, res) => {
   const heute = new Date();
   const heuteStr = datumStr(heute);
   const wocheStr = datumStr(wochenStartDatum(heute));
-  const monatStr = heuteStr.slice(0, 8) + '01';
+  // Gehaltsperiode: 15. bis 14. (statt Kalendermonat 1. bis 31.)
+  const pvon     = periodeStart(heuteStr);
+  const pbis     = periodeEnde(pvon);
 
   const minToH = min => +(min / 60).toFixed(1);
 
   const hMin = db.prepare('SELECT COALESCE(SUM(dauer_minuten),0) v FROM zeiten WHERE datum = ?').get(heuteStr).v;
   const wMin = db.prepare('SELECT COALESCE(SUM(dauer_minuten),0) v FROM zeiten WHERE datum >= ?').get(wocheStr).v;
-  const mMin = db.prepare('SELECT COALESCE(SUM(dauer_minuten),0) v FROM zeiten WHERE datum >= ?').get(monatStr).v;
+  const mMin = db.prepare('SELECT COALESCE(SUM(dauer_minuten),0) v FROM zeiten WHERE datum >= ? AND datum <= ?').get(pvon, pbis).v;
 
   const taskCounts = { Offen: 0, 'In Arbeit': 0, Blockiert: 0 };
   db.prepare('SELECT status, COUNT(*) c FROM aufgaben WHERE status != ? GROUP BY status').all('Erledigt')
@@ -253,20 +329,31 @@ app.get('/api/charts/woche', auth, (req, res) => {
     tage.push({ datum: ds, minuten: min });
   }
   const totalMin = tage.reduce((s, t) => s + t.minuten, 0);
-  res.json({ tage, total: +(totalMin / 60).toFixed(1), von: tage[0].datum, bis: tage[6].datum });
+  // Gehaltsperiode zur Wochenmitte (Donnerstag) berechnen
+  const pvon = periodeStart(tage[3].datum);
+  const pbis = periodeEnde(pvon);
+  const periodeMin = db.prepare(
+    'SELECT COALESCE(SUM(dauer_minuten),0) v FROM zeiten WHERE datum >= ? AND datum <= ?'
+  ).get(pvon, pbis).v;
+  res.json({
+    tage, total: +(totalMin / 60).toFixed(1), von: tage[0].datum, bis: tage[6].datum,
+    periode: { von: pvon, bis: pbis, stunden: +(periodeMin / 60).toFixed(2), soll: SOLL_STUNDEN_PRO_PERIODE }
+  });
 });
 
 app.get('/api/charts/monat', auth, (req, res) => {
   const jahr = Number(req.query.jahr) || new Date().getFullYear();
   const monate = [];
   for (let m = 1; m <= 12; m++) {
-    const ms = String(m).padStart(2, '0');
+    // Gehaltsperiode: 15. des Monats bis 14. des Folgemonats
+    const vonStr = `${jahr}-${String(m).padStart(2, '0')}-15`;
+    const bisStr = periodeEnde(vonStr);
     const min = db.prepare(
-      "SELECT COALESCE(SUM(dauer_minuten),0) v FROM zeiten WHERE datum LIKE ?"
-    ).get(`${jahr}-${ms}-%`).v;
-    monate.push({ monat: m, minuten: min });
+      'SELECT COALESCE(SUM(dauer_minuten),0) v FROM zeiten WHERE datum >= ? AND datum <= ?'
+    ).get(vonStr, bisStr).v;
+    monate.push({ monat: m, minuten: min, von: vonStr, bis: bisStr });
   }
-  res.json({ jahr, monate });
+  res.json({ jahr, monate, soll: SOLL_STUNDEN_PRO_PERIODE });
 });
 
 // ── Aufgaben API ──────────────────────────────────────────────────────────────
@@ -332,6 +419,60 @@ app.delete('/api/archiv/:id', auth, (req, res) => {
   const { changes } = db.prepare('DELETE FROM archiv WHERE id = ?').run(Number(req.params.id));
   if (!changes) return res.status(404).json({ error: 'Eintrag nicht gefunden' });
   res.json({ ok: true });
+});
+
+// ── Perioden API ──────────────────────────────────────────────────────────────
+// Gibt alle 12 Gehaltsperioden von ARBEITSBEGINN bis PERIODEN_ENDE zurück
+// (auch zukünftige Perioden werden angezeigt, dann mit 0 Stunden)
+app.get('/api/perioden', auth, (req, res) => {
+  const perioden = [];
+  let pvon = ARBEITSBEGINN;
+  while (pvon <= PERIODEN_ENDE) {
+    const pbis = periodeEnde(pvon);
+    const min  = db.prepare(
+      'SELECT COALESCE(SUM(dauer_minuten),0) v FROM zeiten WHERE datum >= ? AND datum <= ?'
+    ).get(pvon, pbis).v;
+    perioden.push({ von: pvon, bis: pbis, stunden: +(min / 60).toFixed(2) });
+    // Nächste Periode: 15. des folgenden Monats
+    const [y, m] = pvon.split('-').map(Number);
+    const next   = new Date(y, m, 15); // JS-Monat 0-basiert: m entspricht Folgemonat
+    pvon = next.getFullYear() + '-' + String(next.getMonth() + 1).padStart(2, '0') + '-15';
+  }
+  perioden.reverse(); // Neueste zuerst
+  res.json({ perioden, soll: SOLL_STUNDEN_PRO_PERIODE });
+});
+
+// ── Urlaub API ────────────────────────────────────────────────────────────────
+const URLAUB_TAGE_PRO_JAHR = 6;
+
+app.get('/api/urlaub', auth, (req, res) => {
+  const alle     = db.prepare('SELECT * FROM urlaub ORDER BY von_datum DESC').all();
+  const vonStr   = urlaubsjahrVon();
+  const bisStr   = `${parseInt(vonStr.slice(0, 4)) + 1}-05-14`;
+  const verbraucht = db.prepare(
+    'SELECT COALESCE(SUM(tage_anzahl),0) v FROM urlaub WHERE von_datum >= ? AND von_datum <= ?'
+  ).get(vonStr, bisStr).v;
+  res.json({
+    eintraege: alle,
+    jahr: { von: vonStr, bis: bisStr, gesamt: URLAUB_TAGE_PRO_JAHR, verbraucht, verbleibend: URLAUB_TAGE_PRO_JAHR - verbraucht }
+  });
+});
+
+app.post('/api/urlaub', auth, nurMitarbeiter, (req, res) => {
+  const { von_datum, bis_datum, notiz = '' } = req.body;
+  if (!von_datum || !bis_datum) return res.status(400).json({ error: 'Pflichtfelder fehlen' });
+  if (von_datum > bis_datum)   return res.status(400).json({ error: 'Von-Datum muss vor Bis-Datum liegen' });
+  const tage_anzahl = zaehleArbeitstage(von_datum, bis_datum);
+  const r = db.prepare(
+    'INSERT INTO urlaub (von_datum, bis_datum, tage_anzahl, notiz) VALUES (?,?,?,?)'
+  ).run(von_datum, bis_datum, tage_anzahl, notiz);
+  res.json(db.prepare('SELECT * FROM urlaub WHERE id = ?').get(Number(r.lastInsertRowid)));
+});
+
+app.delete('/api/urlaub/:id', auth, nurMitarbeiter, (req, res) => {
+  const { changes } = db.prepare('DELETE FROM urlaub WHERE id = ?').run(Number(req.params.id));
+  if (!changes) return res.status(404).json({ error: 'Eintrag nicht gefunden' });
+  res.json({ success: true });
 });
 
 // ── Fehlerbehandlung ──────────────────────────────────────────────────────────

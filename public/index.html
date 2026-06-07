@@ -6,6 +6,7 @@
 <title>Arbeitszeit-App</title>
 <style>
 :root {
+  color-scheme: dark;
   --bg:       #0f1117;
   --surface:  #1a1d27;
   --border:   #2d3148;
@@ -425,6 +426,41 @@ input,select,textarea{font-family:inherit}
   .timer-time{font-size:2rem}
 }
 
+/* ── Periodenansicht (Liste) ─────────────────────────── */
+.periode-zeile {
+  display:flex;align-items:center;justify-content:space-between;
+  padding:11px 16px;border-radius:var(--r-sm);border:1px solid var(--border);
+  margin-bottom:6px;gap:12px }
+.periode-zeile.aktuell { border-color:var(--blue);background:var(--blue-bg) }
+.periode-range { font-size:.88rem;font-weight:500;color:var(--text) }
+.periode-aktuell-badge {
+  display:inline-block;font-size:.68rem;font-weight:700;color:var(--blue);
+  background:rgba(59,130,246,.15);padding:1px 8px;border-radius:10px;
+  margin-left:8px;vertical-align:middle }
+.periode-ist-soll { font-size:.88rem;font-weight:700;white-space:nowrap }
+.periode-ist-soll.soll-ok    { color:var(--green) }
+.periode-ist-soll.soll-unter { color:var(--amber) }
+.periode-ist-soll.leer       { color:var(--muted) }
+.periode-ist-soll.aktuell    { color:var(--blue) }
+
+/* ── Urlaub Tab ──────────────────────────────────────── */
+.urlaub-stats { display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px }
+.urlaub-stat-card {
+  flex:1;min-width:120px;padding:14px 18px;border-radius:var(--r-sm);
+  border:1px solid var(--border);text-align:center }
+.urlaub-stat-zahl { font-size:2rem;font-weight:700;line-height:1;margin-bottom:4px }
+.urlaub-stat-label { font-size:.72rem;font-weight:600;text-transform:uppercase;
+  letter-spacing:.07em;color:var(--muted) }
+.urlaub-jahresinfo { font-size:.82rem;color:var(--muted);padding:8px 0 4px }
+.urlaub-table { width:100%;border-collapse:collapse;font-size:.85rem }
+.urlaub-table th {
+  text-align:left;padding:8px 12px;font-size:.72rem;font-weight:600;
+  text-transform:uppercase;letter-spacing:.06em;color:var(--muted);
+  border-bottom:2px solid var(--border);background:var(--bg) }
+.urlaub-table td { padding:8px 12px;border-bottom:1px solid var(--border);vertical-align:middle }
+.urlaub-table tr:last-child td { border-bottom:none }
+.urlaub-table tr:hover td { background:rgba(255,255,255,.04) }
+
 /* ── Demo Banner ─────────────────────────────────────── */
 #demo-banner{
   background:var(--amber-bg);border-bottom:1px solid #3a2a0a;
@@ -478,6 +514,7 @@ input,select,textarea{font-family:inherit}
     <button class="tab-btn active" onclick="switchTab('zeiten')">Zeiten</button>
     <button class="tab-btn" onclick="switchTab('aufgaben')">Aufgaben</button>
     <button class="tab-btn" onclick="switchTab('archiv')">Archiv</button>
+    <button class="tab-btn" onclick="switchTab('urlaub')">Urlaub</button>
   </nav>
 
   <!-- Content -->
@@ -491,7 +528,7 @@ input,select,textarea{font-family:inherit}
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
           <div class="view-toggle">
             <button class="view-btn active" id="vbtn-woche" onclick="setView('woche')">Woche</button>
-            <button class="view-btn" id="vbtn-monat" onclick="setView('monat')">Jahr</button>
+            <button class="view-btn" id="vbtn-monat" onclick="setView('monat')">Periode</button>
           </div>
         </div>
 
@@ -510,18 +547,9 @@ input,select,textarea{font-family:inherit}
           <div id="chart-bars-woche" class="chart-area"></div>
         </div>
 
-        <!-- Jahresansicht -->
+        <!-- Periodenansicht -->
         <div id="chart-monat" style="display:none">
-          <div class="chart-nav">
-            <div>
-              <span class="chart-nav-label" id="monat-label">Jahr</span>
-            </div>
-            <div class="chart-nav-btns">
-              <button class="chart-nav-btn" onclick="navJahr(-1)">← Zurück</button>
-              <button class="chart-nav-btn" id="jahr-forward-btn" onclick="navJahr(1)">Vor →</button>
-            </div>
-          </div>
-          <div id="chart-bars-monat" class="chart-area"></div>
+          <div id="perioden-liste"></div>
         </div>
       </div>
 
@@ -625,6 +653,56 @@ input,select,textarea{font-family:inherit}
       </div>
     </div>
 
+    <!-- ═══ Urlaub Tab ═══ -->
+    <div id="tab-urlaub" class="tab-content">
+
+      <!-- Übersicht -->
+      <div class="card">
+        <div class="card-title">Urlaubsübersicht</div>
+        <div id="urlaub-uebersicht">
+          <div class="empty-state">Wird geladen…</div>
+        </div>
+      </div>
+
+      <!-- Eintragen (nur Mitarbeiter) -->
+      <div id="urlaub-form-card" class="card" style="display:none">
+        <div class="card-title">Urlaub eintragen</div>
+        <form id="urlaub-form" onsubmit="submitUrlaub(event)">
+          <div class="form-row">
+            <div class="form-group">
+              <label>Von</label>
+              <input type="date" id="ul-von" required onchange="updateUrlaubTage()">
+            </div>
+            <div class="form-group">
+              <label>Bis</label>
+              <input type="date" id="ul-bis" required onchange="updateUrlaubTage()">
+            </div>
+            <div class="form-group" style="max-width:130px">
+              <label>Arbeitstage</label>
+              <input type="number" id="ul-tage" readonly min="1"
+                style="background:var(--bg);color:var(--muted);cursor:default" tabindex="-1">
+            </div>
+            <div class="form-group">
+              <label>Notiz (optional)</label>
+              <input type="text" id="ul-notiz" placeholder="z.B. Familienurlaub">
+            </div>
+            <div class="form-group" style="max-width:130px;justify-content:flex-end">
+              <button type="submit" class="btn-primary" style="width:100%">Eintragen</button>
+            </div>
+          </div>
+        </form>
+      </div>
+
+      <!-- Liste aller Einträge -->
+      <div class="card">
+        <div class="card-title">Eingetragener Urlaub</div>
+        <div id="urlaub-liste">
+          <div class="empty-state">Noch kein Urlaub eingetragen</div>
+        </div>
+      </div>
+
+    </div><!-- /tab-urlaub -->
+
   </div><!-- /main -->
 </div><!-- /app -->
 
@@ -717,6 +795,9 @@ input,select,textarea{font-family:inherit}
 <div id="toast-container"></div>
 
 <script>
+// Soll-Arbeitszeit pro Gehaltsperiode (15. bis 14.) – hier zentral anpassbar
+const SOLL_STUNDEN = 35.29;
+
 // ══════════════════════════════════════════════════════════════════════
 //  STATE
 // ══════════════════════════════════════════════════════════════════════
@@ -730,6 +811,7 @@ const S = {
   stats: null,
   aufgaben: [],
   archiv: [],
+  urlaub: null,
   wochenDaten: null,
   jahresDaten: null,
   wochenEintraege: [],
@@ -764,6 +846,40 @@ function wochenTagKurz(dateStr){
   return ['So','Mo','Di','Mi','Do','Fr','Sa'][d.getDay()];
 }
 const MONATE_KURZ = ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
+
+// Kurzformat ohne Jahr: "15.06."
+function fmtKurz(dateStr) {
+  if (!dateStr) return '–';
+  const [, m, d] = dateStr.split('-');
+  return `${d}.${m}.`;
+}
+// Perioden-Label: "15.06. – 14.07.2025"
+function fmtPeriode(von, bis) {
+  if (!von || !bis) return '';
+  return `${fmtKurz(von)} – ${fmtKurz(bis)}${bis.slice(0, 4)}`;
+}
+
+// Erste Gehaltsperiode: 15.05.2026 – 14.06.2026 (identisch zur Server-Konstante)
+const ARBEITSBEGINN = '2026-05-15';
+// Letzte Gehaltsperiode beginnt am 15.04.2027 – insgesamt 12 Perioden
+const PERIODEN_ENDE = '2027-04-15';
+
+// Aktuelle Gehaltsperiode im Frontend berechnen (identische Logik wie Server)
+function aktPeriode() {
+  const heute = todayStr();
+  const d = new Date(heute + 'T12:00:00');
+  let pvon;
+  if (d.getDate() >= 15) {
+    pvon = heute.slice(0, 8) + '15';
+  } else {
+    const prev = new Date(d.getFullYear(), d.getMonth() - 1, 15);
+    pvon = prev.getFullYear() + '-' + p2(prev.getMonth() + 1) + '-15';
+  }
+  const [y, m] = pvon.split('-').map(Number);
+  const nextD = new Date(y, m, 14);
+  const pbis = nextD.getFullYear() + '-' + p2(nextD.getMonth() + 1) + '-14';
+  return { von: pvon, bis: pbis };
+}
 
 // ══════════════════════════════════════════════════════════════════════
 //  AUTH
@@ -831,6 +947,7 @@ function switchTab(tab){
   });
   renderDashboard();
   if(tab==='archiv') loadArchiv();
+  if(tab==='urlaub') loadUrlaub();
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -842,10 +959,18 @@ function renderDashboard(){
   const { zeiten, aufgaben, archiv } = S.stats;
 
   if(S.tab==='zeiten'){
+    // Aktuelle Periode berechnen und 3. Karte als Ist/Soll-Anzeige rendern
+    const per = aktPeriode();
+    const ist = zeiten.monat;
+    const perColor = ist >= SOLL_STUNDEN ? 'green' : 'amber';
+    const sollFmt = String(SOLL_STUNDEN.toFixed(2)).replace('.', ',');
     el.innerHTML = [
       dash('Heute', zeiten.heute, 'h', 'blue'),
       dash('Diese Woche', zeiten.woche, 'h', 'green'),
-      dash('Dieser Monat', zeiten.monat, 'h', 'purple')
+      `<div class="dash-card ${perColor}">
+        <div class="dash-card-label">Periode ${fmtKurz(per.von)} – ${fmtKurz(per.bis)}${per.bis.slice(0,4)}</div>
+        <div class="dash-card-value">${ist}<span class="dash-card-unit"> / ${sollFmt} h</span></div>
+      </div>`
     ].join('');
   } else if(S.tab==='aufgaben'){
     el.innerHTML = [
@@ -987,35 +1112,48 @@ async function navWoche(dir){
   await loadWocheChart();
 }
 
-// ── Jahreschart ─────────────────────────────────────────
+// ── Perioden-Liste ───────────────────────────────────────
 async function loadMonatChart(){
-  S.jahresDaten = await api(`/api/charts/monat?jahr=${S.jahr}`);
+  // Alle Gehaltsperioden seit ARBEITSBEGINN laden (neueste zuerst)
+  S.jahresDaten = await api('/api/perioden');
   renderMonatChart();
 }
 function renderMonatChart(){
   const data = S.jahresDaten;
   if(!data) return;
-  const currentYear = new Date().getFullYear();
-  document.getElementById('monat-label').textContent = `Jahr ${data.jahr}`;
-  document.getElementById('jahr-forward-btn').disabled = data.jahr >= currentYear;
-  const max = Math.max(...data.monate.map(m=>m.minuten), 1);
-  const curMonth = new Date().getMonth()+1;
+  const { perioden, soll } = data;
+  const heute = todayStr();
 
-  document.getElementById('chart-bars-monat').innerHTML = data.monate.map((m,i) => {
-    const isCur = data.jahr===currentYear && m.monat===curMonth;
-    const pct = Math.max(3, (m.minuten/max)*100);
-    const h = m.minuten > 0 ? minToH(m.minuten) : '';
-    return `<div class="chart-col${isCur?' today':''}">
-      <div class="bar-val">${h}</div>
-      <div class="bar-track"><div class="bar${isCur?' today':''}" style="height:${pct}%"></div></div>
-      <div class="bar-lbl">${MONATE_KURZ[i]}</div>
+  const html = perioden.map(p => {
+    // Aktuelle Periode: heute liegt zwischen von und bis
+    const istAktuell = heute >= p.von && heute <= p.bis;
+    const ist = p.stunden;
+
+    // Farbklasse bestimmen
+    let klasse;
+    if (istAktuell)     klasse = 'aktuell';
+    else if (ist >= soll) klasse = 'soll-ok';
+    else if (ist > 0)   klasse = 'soll-unter';
+    else                klasse = 'leer';
+
+    const istFmt  = ist > 0
+      ? String(ist.toFixed(2)).replace('.', ',') + ' h'
+      : '– h';
+    const sollFmt = String(soll.toFixed(2)).replace('.', ',');
+
+    return `<div class="periode-zeile${istAktuell ? ' aktuell' : ''}">
+      <span class="periode-range">
+        ${fmtPeriode(p.von, p.bis)}
+        ${istAktuell ? '<span class="periode-aktuell-badge">aktuell</span>' : ''}
+      </span>
+      <span class="periode-ist-soll ${klasse}">${istFmt} / ${sollFmt} h</span>
     </div>`;
   }).join('');
+
+  document.getElementById('perioden-liste').innerHTML = html ||
+    '<div class="empty-state">Keine Perioden vorhanden</div>';
 }
-async function navJahr(dir){
-  S.jahr += dir;
-  await loadMonatChart();
-}
+// navJahr entfällt – ersetzt durch statische Perioden-Liste
 
 // ── Einträge ─────────────────────────────────────────────
 async function loadWochenEintraege(){
@@ -1506,6 +1644,99 @@ async function deleteArchivItem(id){
 }
 
 // ══════════════════════════════════════════════════════════════════════
+//  URLAUB
+// ══════════════════════════════════════════════════════════════════════
+async function loadUrlaub() {
+  S.urlaub = await api('/api/urlaub');
+  renderUrlaubUebersicht();
+  renderUrlaubListe();
+}
+
+function renderUrlaubUebersicht() {
+  const con = document.getElementById('urlaub-uebersicht');
+  if (!S.urlaub) { con.innerHTML = '<div class="empty-state">Fehler beim Laden</div>'; return; }
+  const { gesamt, verbraucht, verbleibend, von, bis } = S.urlaub.jahr;
+  const restFarbe = verbleibend > 0 ? 'var(--green)' : 'var(--red)';
+  con.innerHTML = `
+    <div class="urlaub-stats">
+      <div class="urlaub-stat-card" style="background:var(--blue-bg);border-color:#1e3a6e">
+        <div class="urlaub-stat-zahl" style="color:var(--blue)">${gesamt}</div>
+        <div class="urlaub-stat-label">Gesamt (Jahr)</div>
+      </div>
+      <div class="urlaub-stat-card" style="background:var(--amber-bg);border-color:#3a2a0a">
+        <div class="urlaub-stat-zahl" style="color:#D97706">${verbraucht}</div>
+        <div class="urlaub-stat-label">Verbraucht</div>
+      </div>
+      <div class="urlaub-stat-card" style="background:var(--green-bg);border-color:#1a3a22">
+        <div class="urlaub-stat-zahl" style="color:${restFarbe}">${verbleibend}</div>
+        <div class="urlaub-stat-label">Verbleibend</div>
+      </div>
+    </div>
+    <div class="urlaub-jahresinfo">Urlaubsjahr: ${fmtPeriode(von, bis)} &nbsp;|&nbsp; 6 Tage/Jahr = 0,5 Tage/Periode</div>`;
+}
+
+function renderUrlaubListe() {
+  const con = document.getElementById('urlaub-liste');
+  if (!S.urlaub || !S.urlaub.eintraege.length) {
+    con.innerHTML = '<div class="empty-state">Noch kein Urlaub eingetragen</div>';
+    return;
+  }
+  const canDel = S.role === 'mitarbeiter';
+  con.innerHTML = `<div class="entries-table-wrap"><table class="urlaub-table">
+    <thead><tr>
+      <th>Von</th><th>Bis</th><th>Arbeitstage</th><th>Notiz</th><th>Eingetragen am</th>
+      ${canDel ? '<th></th>' : ''}
+    </tr></thead>
+    <tbody>${S.urlaub.eintraege.map(u => `
+      <tr>
+        <td>${fmt(u.von_datum)}</td>
+        <td>${fmt(u.bis_datum)}</td>
+        <td><span class="duration-badge">${u.tage_anzahl} Tag${u.tage_anzahl !== 1 ? 'e' : ''}</span></td>
+        <td style="color:var(--muted)">${esc(u.notiz) || '–'}</td>
+        <td style="color:var(--muted)">${fmt(u.erstellt_am)}</td>
+        ${canDel ? `<td><button class="btn-icon del" onclick="deleteUrlaub(${u.id})">✕</button></td>` : ''}
+      </tr>`).join('')}
+    </tbody>
+  </table></div>`;
+}
+
+// Arbeitstage (Mo–Fr) im Browser berechnen und ins readonly-Feld schreiben
+function updateUrlaubTage() {
+  const von = document.getElementById('ul-von').value;
+  const bis = document.getElementById('ul-bis').value;
+  if (!von || !bis || von > bis) { document.getElementById('ul-tage').value = ''; return; }
+  let count = 0;
+  const d = new Date(von + 'T12:00:00');
+  const bisD = new Date(bis + 'T12:00:00');
+  while (d <= bisD) { const dow = d.getDay(); if (dow !== 0 && dow !== 6) count++; d.setDate(d.getDate() + 1); }
+  document.getElementById('ul-tage').value = count;
+}
+
+async function submitUrlaub(e) {
+  e.preventDefault();
+  const von = document.getElementById('ul-von').value;
+  const bis = document.getElementById('ul-bis').value;
+  if (von > bis) { toast('Von-Datum muss vor Bis-Datum liegen', 'error'); return; }
+  const body = { von_datum: von, bis_datum: bis, notiz: document.getElementById('ul-notiz').value };
+  try {
+    await api('/api/urlaub', { method: 'POST', body: JSON.stringify(body) });
+    document.getElementById('urlaub-form').reset();
+    document.getElementById('ul-tage').value = '';
+    await loadUrlaub();
+    toast('Urlaub eingetragen');
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+async function deleteUrlaub(id) {
+  if (!confirm('Diesen Urlaubseintrag wirklich löschen?')) return;
+  try {
+    await api(`/api/urlaub/${id}`, { method: 'DELETE' });
+    await loadUrlaub();
+    toast('Urlaubseintrag gelöscht');
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+// ══════════════════════════════════════════════════════════════════════
 //  DEMO – LocalStorage-Schicht
 // ══════════════════════════════════════════════════════════════════════
 function demoSeedIfNeeded() {
@@ -1619,11 +1850,13 @@ async function demoApi(url, opts = {}) {
     const now = new Date(), dow = now.getDay();
     const mo  = new Date(now); mo.setDate(now.getDate() - (dow === 0 ? 6 : dow - 1));
     const wStr = mo.getFullYear() + '-' + p2(mo.getMonth() + 1) + '-' + p2(mo.getDate());
-    const mStr = heute.slice(0, 8) + '01';
+    // Aktuelle Gehaltsperiode (15. – 14.) statt Kalendermonat
+    const pvon = demoPeriodeStart(heute);
+    const pbis = demoPeriodeEnde(pvon);
     const toH  = m => +(m / 60).toFixed(1);
     const hMin = zeiten.filter(z => z.datum === heute).reduce((s, z) => s + z.dauer_minuten, 0);
     const wMin = zeiten.filter(z => z.datum >= wStr).reduce((s, z) => s + z.dauer_minuten, 0);
-    const mMin = zeiten.filter(z => z.datum >= mStr).reduce((s, z) => s + z.dauer_minuten, 0);
+    const mMin = zeiten.filter(z => z.datum >= pvon && z.datum <= pbis).reduce((s, z) => s + z.dauer_minuten, 0);
     const cnt  = { Offen: 0, 'In Arbeit': 0, Blockiert: 0 };
     aufgaben.filter(a => a.status !== 'Erledigt').forEach(a => { if (cnt[a.status] !== undefined) cnt[a.status]++; });
     return { zeiten: { heute: toH(hMin), woche: toH(wMin), monat: toH(mMin) }, aufgaben: cnt, archiv: { total: archiv.length } };
@@ -1690,6 +1923,18 @@ async function demoApi(url, opts = {}) {
   }
 
   // ── /api/charts ───────────────────────────────────────
+  // Gehaltsperioden-Helfer für Demo (spiegelt server-seitige Logik)
+  function demoPeriodeStart(dateStr) {
+    const d = new Date(dateStr + 'T12:00:00');
+    if (d.getDate() >= 15) return dateStr.slice(0, 8) + '15';
+    const prev = new Date(d.getFullYear(), d.getMonth() - 1, 15);
+    return prev.getFullYear() + '-' + p2(prev.getMonth() + 1) + '-15';
+  }
+  function demoPeriodeEnde(startStr) {
+    const [y, m] = startStr.split('-').map(Number);
+    const next = new Date(y, m, 14);
+    return next.getFullYear() + '-' + p2(next.getMonth() + 1) + '-14';
+  }
   if (path === '/api/charts/woche' && method === 'GET') {
     const zeiten = lsGet('demo_zeiten');
     const mo     = wochenMo(qs.datum || todayStr());
@@ -1700,17 +1945,29 @@ async function demoApi(url, opts = {}) {
       tage.push({ datum: ds, minuten: zeiten.filter(z => z.datum === ds).reduce((s, z) => s + z.dauer_minuten, 0) });
     }
     const totalMin = tage.reduce((s, t) => s + t.minuten, 0);
-    return { tage, total: +(totalMin / 60).toFixed(1), von: tage[0].datum, bis: tage[6].datum };
+    // Gehaltsperiode zur Wochenmitte
+    const pvon = demoPeriodeStart(tage[3].datum);
+    const pbis = demoPeriodeEnde(pvon);
+    const periodeMin = zeiten.filter(z => z.datum >= pvon && z.datum <= pbis).reduce((s, z) => s + z.dauer_minuten, 0);
+    return { tage, total: +(totalMin / 60).toFixed(1), von: tage[0].datum, bis: tage[6].datum,
+      periode: { von: pvon, bis: pbis, stunden: +(periodeMin / 60).toFixed(2), soll: SOLL_STUNDEN } };
   }
-  if (path === '/api/charts/monat' && method === 'GET') {
-    const zeiten = lsGet('demo_zeiten');
-    const jahr   = parseInt(qs.jahr) || new Date().getFullYear();
-    const monate = [];
-    for (let m = 1; m <= 12; m++) {
-      const ms = p2(m);
-      monate.push({ monat: m, minuten: zeiten.filter(z => z.datum.startsWith(`${jahr}-${ms}-`)).reduce((s, z) => s + z.dauer_minuten, 0) });
+  if (path === '/api/perioden' && method === 'GET') {
+    const zeiten   = lsGet('demo_zeiten');
+    const perioden = [];
+    // Alle 12 Perioden von ARBEITSBEGINN bis PERIODEN_ENDE (auch zukünftige)
+    let pvon = ARBEITSBEGINN;
+    while (pvon <= PERIODEN_ENDE) {
+      const pbis = demoPeriodeEnde(pvon);
+      const min  = zeiten.filter(z => z.datum >= pvon && z.datum <= pbis).reduce((s, z) => s + z.dauer_minuten, 0);
+      perioden.push({ von: pvon, bis: pbis, stunden: +(min / 60).toFixed(2) });
+      // Nächste Periode: 15. des Folgemonats
+      const [y, mo] = pvon.split('-').map(Number);
+      const next = new Date(y, mo, 15);
+      pvon = next.getFullYear() + '-' + p2(next.getMonth() + 1) + '-15';
     }
-    return { jahr, monate };
+    perioden.reverse(); // Neueste zuerst
+    return { perioden, soll: SOLL_STUNDEN };
   }
 
   // ── /api/aufgaben ─────────────────────────────────────
@@ -1772,6 +2029,35 @@ async function demoApi(url, opts = {}) {
     throw new Error('Im Demo-Modus können Archiveinträge nicht gelöscht werden');
   }
 
+  // ── /api/urlaub ───────────────────────────────────────
+  if (path === '/api/urlaub' && method === 'GET') {
+    const alle = lsGet('demo_urlaub', []).sort((a, b) => b.von_datum.localeCompare(a.von_datum));
+    // Urlaubsjahr: 15. Mai bis 14. Mai
+    const heute = todayStr();
+    const year  = parseInt(heute.slice(0, 4));
+    const vonStr = heute >= `${year}-05-15` ? `${year}-05-15` : `${year - 1}-05-15`;
+    const bisStr = `${parseInt(vonStr.slice(0, 4)) + 1}-05-14`;
+    const verbraucht = alle.filter(u => u.von_datum >= vonStr && u.von_datum <= bisStr)
+      .reduce((s, u) => s + u.tage_anzahl, 0);
+    return { eintraege: alle, jahr: { von: vonStr, bis: bisStr, gesamt: 6, verbraucht, verbleibend: 6 - verbraucht } };
+  }
+  if (path === '/api/urlaub' && method === 'POST') {
+    const { von_datum, bis_datum, notiz = '' } = body;
+    if (!von_datum || !bis_datum) throw new Error('Pflichtfelder fehlen');
+    if (von_datum > bis_datum) throw new Error('Von-Datum muss vor Bis-Datum liegen');
+    let count = 0;
+    const d = new Date(von_datum + 'T12:00:00'), bisD = new Date(bis_datum + 'T12:00:00');
+    while (d <= bisD) { const dow = d.getDay(); if (dow !== 0 && dow !== 6) count++; d.setDate(d.getDate() + 1); }
+    const entry = { id: nextId('urlaub'), von_datum, bis_datum, tage_anzahl: count, notiz, erstellt_am: nowIso() };
+    const alle = lsGet('demo_urlaub', []); alle.push(entry);
+    lsSet('demo_urlaub', alle);
+    return entry;
+  }
+  if (path.match(/^\/api\/urlaub\/\d+$/) && method === 'DELETE') {
+    lsSet('demo_urlaub', lsGet('demo_urlaub', []).filter(u => u.id !== urlId));
+    return { success: true };
+  }
+
   throw new Error('Demo-API: Unbekannter Endpunkt ' + path);
 }
 
@@ -1794,6 +2080,7 @@ async function init(){
   if(S.role==='mitarbeiter'){
     document.getElementById('manual-entry-card').style.display='';
     document.getElementById('me-datum').value = todayStr();
+    document.getElementById('urlaub-form-card').style.display='';
   }
 
   // Demo-Ansicht initialisieren
@@ -1801,6 +2088,7 @@ async function init(){
     chip.textContent = 'Demo';
     document.getElementById('manual-entry-card').style.display='';
     document.getElementById('me-datum').value = todayStr();
+    document.getElementById('urlaub-form-card').style.display='';
     demoSeedIfNeeded();
     document.getElementById('demo-banner').style.display='';
   }
@@ -1817,12 +2105,14 @@ async function init(){
 
   renderStempelBtn();
 
-  // Load all data
-  await Promise.all([
-    loadStats(),
-    loadWocheChart(),
-    loadAufgaben()
-  ]);
+  // Daten laden – Fehler einzelner Endpunkte dürfen App nicht einfrieren
+  try {
+    await Promise.all([
+      loadStats(),
+      loadWocheChart(),
+      loadAufgaben()
+    ]);
+  } catch(e) { console.error('Ladefehler beim Start:', e); }
 
   document.getElementById('loading-screen').style.display='none';
   document.getElementById('app').style.display='';
