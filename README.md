@@ -4,7 +4,7 @@ A simple web app to track work hours and manage tasks — built for a small team
 
 ## Demo
 
--> [Open Demo](https://abdi.silm.dev/demo/063A88368A69)
+-> [Open Demo](https://abdi.silm.dev/demo/6006B04A0721)
 
 ## The Story
 
